@@ -167,7 +167,6 @@ def initial_program_setup():
 cluster_details, service_details = initial_program_setup()
 
 logger.info(json.dumps(cluster_details, default=default_serialize_func))
-logger.info(json.dumps(service_details, default=default_serialize_func))
 ranger_client = RangerClient(
     KazooClient(hosts=cluster_details.zk_string,
                 # proper infinite retries to ensure we handle network flakiness
