@@ -1,7 +1,7 @@
 # Python ranger daemon
 
 This is a simple light daemon that can run alongside your software to provide regular service discovery updates to zookeeper.
-Check [Ranger]([https://github.com/appform-io/ranger]) for more details. You'll need it to follow some jargon being used in this readme.
+Check [Ranger](https://github.com/appform-io/ranger) for more details. You'll need it to follow some jargon being used in this readme.
 
 ## Intent
 Ideally, you would directly use the standard Ranger java client to deeply integrate the service's health updates with ranger.<br>  
@@ -29,7 +29,7 @@ Docker containers are available on the [DockerHub](https://hub.docker.com/reposi
 
 ---
 
-## Under the hood
+### Under the hood
 The daemon will write data to zookeeper in the following format (datamodel from ranger):
 ```json
 {
@@ -49,6 +49,8 @@ at a periodic intervals of --interval (default: 1 second)
 - Infinite retry and connection reattempts in case of zk connection issues
 - Proper cleanup of zk connections to get rid of ephemeral nodes
 - Proper logging
+
+
 
 ### In the works
 - [ ] Healthcheck capabilities before updating zookeeper
