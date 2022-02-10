@@ -1,0 +1,4 @@
+kazoo
+python_daemon==2.3.0
+timeloop==1.0.2
+requests==2.26.0
