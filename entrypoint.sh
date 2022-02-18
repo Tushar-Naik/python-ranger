@@ -25,7 +25,7 @@ trap 'kill ${!}; term_handler' SIGTERM
 # run python ranger daemon
 ls
 echo "Publishing ranger updates on cluster:[$RANGER_ZK] with name:$SERVICE_NAME host:$HOST port:$PORT env:$ENV under namespace:$NAMESPACE"
-python3.9 ranger_daemon.py -zk $RANGER_ZK -s $SERVICE_NAME -host $HOST -p $PORT -e $ENV -n $NAMESPACE> ranger_daemon.log &
+python3.9 ranger_daemon.py -zk $RANGER_ZK -s $SERVICE_NAME -host $HOST -p $PORT -e $ENV -n $NAMESPACE -hcu $HEALTH_CHECK > ranger_daemon.log &
 pid="$!"
 
 # wait forever

@@ -16,7 +16,12 @@ RUN python3.9 -m pip install --upgrade pip setuptools wheel
 ADD requirements.txt requirements.txt
 RUN pip3 install --trusted-host pypi.python.org -r requirements.txt
 
-ADD ranger_daemon.py ranger_daemon.py
+ADD serviceprovider/ranger_daemon.py ranger_daemon.py
+ADD serviceprovider/job.py job.py
+ADD serviceprovider/ranger_models.py ranger_models.py
+ADD serviceprovider/exceptions.py exceptions.py
+ADD serviceprovider/service_provider.py service_provider.py
+
 ADD entrypoint.sh entrypoint.sh
 RUN chmod +x entrypoint.sh
 

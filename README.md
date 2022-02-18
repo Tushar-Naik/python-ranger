@@ -15,13 +15,25 @@ After this, your application should be ready for service discovery.
 
 ### How to run
 The following is the docker command to run the script, using environment variables
+
+| Env Variable | Description                                         |
+|--------------|-----------------------------------------------------|
+| HOST         | Hostname                                            |
+| PORT         | Port                                                |
+| RANGER_ZK    | Zookeeper connection string                         |
+| SERVICE_NAME | Name of service                                     |
+| ENV          | Environment (stage/prod)                            |
+| NAMESPACE    | Namespace in zookeeper                              |
+| HEALTH_CHECK | [optional] GET healthcheck URL to be used for pings |
+
+
 ```shell
-docker run --rm -d -e RANGER_ZK=<zookeeper_info> -e SERVICE_NAME=<name_of_service> -e HOST=<host_of_machine> -e PORT=<port> -e ENV=<environment> -e NAMESPACE=<namespace> --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.0
+docker run --rm -d -e RANGER_ZK=<zookeeper_info> -e SERVICE_NAME=<name_of_service> -e HOST=<host_of_machine> -e PORT=<port> -e ENV=<environment> -e NAMESPACE=<namespace> -e HEALTH_CHECK=<health_check_url> --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.0
 ```
 
 Here is an example for running it on a Mac machine, assuming your zookeeper is already running on `localhost:2181` (notice the network being set to `host` and zookeeper being sent as `host.docker.internal` for connecting to localhost from within docker)
 ```shell
-docker run --rm -d --network host -e RANGER_ZK=host.docker.internal:2181 -e SERVICE_NAME=python-test -e HOST=localhost -e PORT=12211 -e ENV=stage -e NAMESPACE=myorg --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.0
+docker run --rm -d --network host -e RANGER_ZK=host.docker.internal:2181 -e SERVICE_NAME=python-test -e HOST=localhost -e PORT=12211 -e ENV=stage -e NAMESPACE=myorg -e HEALTH_CHECK="localhost:12211/health" --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.1
 ```
 
 ### Docker
