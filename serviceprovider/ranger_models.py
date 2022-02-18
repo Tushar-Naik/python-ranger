@@ -1,5 +1,9 @@
 from enum import Enum
 
+"""
+includes all models required for the service provider
+"""
+
 
 class HealthcheckStatus(Enum):
     HEALTHY = "healthy"

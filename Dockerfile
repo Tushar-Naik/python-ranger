@@ -21,6 +21,8 @@ ADD serviceprovider/job.py job.py
 ADD serviceprovider/ranger_models.py ranger_models.py
 ADD serviceprovider/exceptions.py exceptions.py
 ADD serviceprovider/service_provider.py service_provider.py
+ADD serviceprovider/health_check.py health_check.py
+ADD serviceprovider/helper.py helper.py
 
 ADD entrypoint.sh entrypoint.sh
 RUN chmod +x entrypoint.sh

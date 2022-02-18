@@ -4,9 +4,12 @@ from setuptools import setup
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+with open("version.txt", "r") as fh2:
+    version = fh2.read()
+
 setup(
     name='serviceprovider',
-    version='1.2',
+    version=version,
     packages=['serviceprovider'],
     license=' License 2.0',
     description='A service discovery service provider using zookeeper for providing updates',

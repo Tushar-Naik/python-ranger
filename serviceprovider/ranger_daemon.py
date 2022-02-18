@@ -13,7 +13,7 @@ in path: /namespace/service
 at a periodic intervals of --interval (default: 1 second)
 
 How to run this script? 
-python3.9 ranger_daemon.py -zk $ZK_CONNECTION_STRING -s $SERVICE_NAME -host $HOST -p $PORT -e $ENV > ranger_discovery.log 
+python3.9 ranger_daemon.py -zk $ZK_CONNECTION_STRING -s $SERVICE_NAME -host $HOST -p $PORT -e $ENV -hcu $HEALTH_CHECK > ranger_daemon.log 
 
 '''
 

@@ -11,26 +11,30 @@ There are 2 sections in here.
 ## Ranger Service Provider
 
 A service provider in Ranger is something can be used to broadcast that a service is available at some host:port, where
-certains clients can connect and request services (make http calls). This broadcast is essentially done using zookeeper.
+certain clients can connect and request services (make http calls). This broadcast is essentially done using zookeeper.
 The following python class helps you do the same for a python script It follows the same models as present in the main
 java library.
+
+Similar details can be found at [PyPi](https://pypi.org/project/serviceprovider/)
 
 ### Installation
 
 ```shell
-python3.9 -m pip install serviceprovider=1.2
+python3.9 -m pip install serviceprovider=1.4
 ```
 
 ### Usage
 
 ```python
 from serviceprovider.ranger_models import *
-from serviceprovider import RangerServiceProvider
+from serviceprovider import RangerServiceProvider, HealthCheck
 
 # Create the ranger service provider
-ranger = RangerServiceProvider(ClusterDetails('localhost:2181', update_interval=1),
-                               ServiceDetails(host='localhost', port=12211, environment='stage', namespace='myorg',
-                                              service_name='python-test'))
+ranger = RangerServiceProvider(cluster_details=ClusterDetails(zk_string='localhost:2181', update_interval=1),
+                               service_details=ServiceDetails(host='localhost', port=12211, environment='stage',
+                                                              namespace='myorg',
+                                                              service_name='python-test'),
+                               health_check=HealthCheck(url='localhost:12211/health', scheme=UrlScheme.GET))
 
 ## Start the updates in background (this will update zookeeper at regular intervals)
 ranger.start()
@@ -45,7 +49,7 @@ ranger.stop()
 ## Ranger Daemon setup
 
 This section deals with using the code as a simple light daemon that can run alongside your software to provide regular
-service discovery updates to zookeeper. As usual, Check [Ranger](https://github.com/appform-io/ranger) for more details.
+service discovery updates to zookeeper. As usual, check [Ranger](https://github.com/appform-io/ranger) for more details.
 
 ## Intent
 
@@ -75,7 +79,7 @@ The following is the docker command to run the script, using environment variabl
 | HEALTH_CHECK | [optional] GET healthcheck URL to be used for pings |
 
 ```shell
-docker run --rm -d -e RANGER_ZK=<zookeeper_info> -e SERVICE_NAME=<name_of_service> -e HOST=<host_of_machine> -e PORT=<port> -e ENV=<environment> -e NAMESPACE=<namespace> -e HEALTH_CHECK=<health_check_url> --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.0
+docker run --rm -d -e RANGER_ZK=<zookeeper_info> -e SERVICE_NAME=<name_of_service> -e HOST=<host_of_machine> -e PORT=<port> -e ENV=<environment> -e NAMESPACE=<namespace> -e HEALTH_CHECK=<health_check_url> --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.4
 ```
 
 Here is an example for running it on a Mac machine, assuming your zookeeper is already running on `localhost:2181` (
@@ -83,7 +87,7 @@ notice the network being set to `host` and zookeeper being sent as `host.docker.
 from within docker)
 
 ```shell
-docker run --rm -d --network host -e RANGER_ZK=host.docker.internal:2181 -e SERVICE_NAME=python-test -e HOST=localhost -e PORT=12211 -e ENV=stage -e NAMESPACE=myorg -e HEALTH_CHECK="localhost:12211/health" --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.1
+docker run --rm -d --network host -e RANGER_ZK=host.docker.internal:2181 -e SERVICE_NAME=python-test -e HOST=localhost -e PORT=12211 -e ENV=stage -e NAMESPACE=myorg -e HEALTH_CHECK="localhost:12211/health" --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.4
 ```
 
 ### Docker
@@ -109,7 +113,7 @@ The daemon will write data to zookeeper in the following format (datamodel from 
 }
 ```
 
-in the path: /$NAMESPACE/$SERVICE_NAME at a periodic intervals of --interval (default: 1 second)
+Updates will be puslised in the path: /$NAMESPACE/$SERVICE_NAME at a periodic intervals of --interval (default: 1 second)
 
 **Takes care of the following :**
 
@@ -118,6 +122,3 @@ in the path: /$NAMESPACE/$SERVICE_NAME at a periodic intervals of --interval (de
 - Proper logging
 - Does continuous health check pings on a particular health check url if required [optional]
 
-### In the works
-
-- [ ] Healthcheck capabilities before updating zookeeper
