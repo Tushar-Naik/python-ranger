@@ -83,9 +83,18 @@ class _RangerClient(object):
 
 class HealthCheck(object):
     def __init__(self, url, scheme: UrlScheme, logger, data=None, headers=None, timeout=1.0, acceptable_errors=None):
+        """
+        :param url: url path where health pings can be done at
+        :param scheme: GET / POST
+        :param logger: custom logger if provided
+        :param data: data if its a POST scheme
+        :param headers: headers if required
+        :param timeout: timeout for the ping call
+        :param acceptable_errors: in case you wanna indicate that some non-2xx response is acceptable
+        """
         self.url = url
         self.scheme = scheme
-        self.logger = logger
+        self.logger = logger if logger is not None else _get_default_logger()
         self.data = data
         self.timeout = timeout
         self.headers = headers if headers is not None else {"Content-Type": "application/json"}
@@ -129,7 +138,7 @@ class RangerServiceProvider(object):
     """
 
     def __init__(self, cluster_details: ClusterDetails, service_details: ServiceDetails,
-                 health_check: HealthCheck, logger=None):
+                 health_check: HealthCheck = None, logger=None):
         """
         :param cluster_details: Zookeeper cluster details
         :param service_details: Service details like name, host, port etc
@@ -148,7 +157,7 @@ class RangerServiceProvider(object):
             self.cluster_details,
             self.service_details,
             self.logger)
-        self.job = Job(timedelta(seconds=self.cluster_details.update_interval), self._ranger_update_tick)
+        self.job = None
 
     def _stop_zk_updates(self):
         if not self.is_running:
@@ -191,6 +200,7 @@ class RangerServiceProvider(object):
         self.is_running = True
         self.logger.info(json.dumps(self.cluster_details, default=_default_serialize_func))
         self.ranger_client.start()
+        self.job = Job(timedelta(seconds=self.cluster_details.update_interval), self._ranger_update_tick)
         self.job.daemon = not block
         self.job.start()
         if block:
@@ -201,4 +211,5 @@ class RangerServiceProvider(object):
         """
         Stop zookeeper updates
         """
-        self._stop_zk_updates()
+        self.job.stop()
+        self.is_running = False

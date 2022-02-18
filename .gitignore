@@ -1,39 +1,15 @@
 .idea/
+.vscode
 target/
 *.iml
 *.iws
 *.ipr
-
-# See https://help.github.com/ignore-files/ for more about ignoring files.
-
-# testing
-/coverage
-
-# production
-/build
-/build_stage
-/build_preprod
-
-# misc
-.DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-.idea
-.vscode
-package-lock.json
-
-yarn.lock
-
-# Eclipse stuff
-.project
-.settings/
-.classpath
 
 lib
 pyvenv.cfg
 __pycache__
 bin
 *.log
+dist
+serviceprovider.egg-info
+include

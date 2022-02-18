@@ -1,13 +1,12 @@
 # please install python if it is not present in the system
 from setuptools import setup
-import serviceprovider
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name=serviceprovider.__name__,
-    version=serviceprovider.__version__,
+    name='serviceprovider',
+    version='1.2',
     packages=['serviceprovider'],
     license=' License 2.0',
     description='A service discovery service provider using zookeeper for providing updates',
@@ -20,4 +19,20 @@ setup(
     url="https://github.com/Tushar-Naik/python-ranger-daemon",
     include_package_data=True,
     py_modules=['serviceprovider'],
+    install_requires=[
+        'requests',
+        'kazoo',
+        'python_daemon'
+    ],
+    classifiers=[
+        'Development Status :: 5 - Production/Stable',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: Apache Software License',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: Implementation :: PyPy',
+        'Topic :: Utilities',
+        'Topic :: System :: Networking',
+        'Topic :: System :: Distributed Computing'
+    ],
 )

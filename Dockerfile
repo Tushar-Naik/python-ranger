@@ -1,5 +1,5 @@
 FROM python:latest
-MAINTAINER Tushar Naik "tushar.naik@phonepe.com"
+MAINTAINER Tushar Naik "tushar.knaik@gmail.com"
 
 RUN apt-get update -y
 RUN apt-get install -y software-properties-common
