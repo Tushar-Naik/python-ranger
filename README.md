@@ -1,6 +1,6 @@
 # Python Ranger
-[![PyPI version](https://img.shields.io/pypi/v/serviceprovider)](https://pypi.org/project/serviceprovider)
-[![Docker Image](https://img.shields.io/docker/v/tusharknaik/python-ranger-daemon)](https://hub.docker.com/repository/docker/tusharknaik/python-ranger-daemon)
+[![PyPI version](https://img.shields.io/pypi/v/serviceprovider?style=for-the-badge)](https://pypi.org/project/serviceprovider)
+[![Docker Image](https://img.shields.io/docker/v/tusharknaik/python-ranger-daemon?style=for-the-badge)](https://hub.docker.com/repository/docker/tusharknaik/python-ranger-daemon)
 
 Before you start, you might wanna check [Ranger](https://github.com/appform-io/ranger) for more details. You'll need it
 to follow some jargon being used in this readme.
