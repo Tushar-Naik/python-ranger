@@ -31,3 +31,9 @@ yarn.lock
 .project
 .settings/
 .classpath
+
+lib
+pyvenv.cfg
+__pycache__
+bin
+*.log
