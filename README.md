@@ -81,7 +81,7 @@ The following is the docker command to run the script, using environment variabl
 | HEALTH_CHECK | [optional] GET healthcheck URL to be used for pings |
 
 ```shell
-docker run --rm -d -e RANGER_ZK=<zookeeper_info> -e SERVICE_NAME=<name_of_service> -e HOST=<host_of_machine> -e PORT=<port> -e ENV=<environment> -e NAMESPACE=<namespace> -e HEALTH_CHECK=<health_check_url> --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.5
+docker run --rm -d -e RANGER_ZK=<zookeeper_info> -e SERVICE_NAME=<name_of_service> -e HOST=<host_of_machine> -e PORT=<port> -e ENV=<environment> -e NAMESPACE=<namespace> -e HEALTH_CHECK=<health_check_url> --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.6
 ```
 
 Here is an example for running it on a Mac machine, assuming your zookeeper is already running on `localhost:2181` (
@@ -89,7 +89,7 @@ notice the network being set to `host` and zookeeper being sent as `host.docker.
 from within docker)
 
 ```shell
-docker run --rm -d --network host -e RANGER_ZK=host.docker.internal:2181 -e SERVICE_NAME=python-test -e HOST=localhost -e PORT=12211 -e ENV=stage -e NAMESPACE=myorg -e HEALTH_CHECK="localhost:12211/health" --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.5
+docker run --rm -d --network host -e RANGER_ZK=host.docker.internal:2181 -e SERVICE_NAME=python-test -e HOST=localhost -e PORT=12211 -e ENV=stage -e NAMESPACE=myorg -e HEALTH_CHECK="localhost:12211/health" --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.6
 ```
 
 ### Docker
@@ -123,4 +123,3 @@ Updates will be puslised in the path: /$NAMESPACE/$SERVICE_NAME at a periodic in
 - Proper cleanup of zk connections to get rid of ephemeral nodes
 - Proper logging
 - Does continuous health check pings on a particular health check url if required [optional]
-
