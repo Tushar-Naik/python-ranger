@@ -1,4 +1,5 @@
 # Python Ranger
+
 [![PyPI version](https://img.shields.io/pypi/v/serviceprovider?style=for-the-badge)](https://pypi.org/project/serviceprovider)
 [![Docker Image](https://img.shields.io/docker/v/tusharknaik/python-ranger-daemon?style=for-the-badge)](https://hub.docker.com/repository/docker/tusharknaik/python-ranger-daemon)
 
@@ -62,13 +63,50 @@ for a service written in a langauge other than java, or you are unable to add th
 java application.
 
 The intent of this daemon is to run along-side your application and publish updates, as long as your service is up and
-healthy. Currently, support has been added for a dockerized setup. You can use docker compose to run your service and
-this daemon as a multi container docker application<br>
+healthy. Currently, support has been added for a dockerized setup, as well as an import based custom setup. Currently,
+Support has been provided for the following:
+
+1. Simple usage
+2. Import based usage
+3. Docker multi-container setup
+
+### 1. Simple usage
+
+If you just wish to invoke the script directly, clone the project and follow along the helper. You command will look
+like so
+
+```shell
+python3.10 serviceprovider/ranger_daemon.py -zk localhost:2181 -s myapp -host localhost -p 12211 -n org -e stage -hcu 'http://localhost:12211/healthcheck?pretty=true'
+```
+
+### 2. Import Based Usage
+
+You can also choose to run the daemon from within another python file, by forwarding the command line arguments. Install
+the package first, as shown below
+
+```shell
+python3.9 -m pip install serviceprovider
+```
+
+```python
+import sys
+from serviceprovider.ranger_daemon import ranger_daemon_trigger
+
+ranger_daemon_trigger(sys.argv[1:])
+```
+
+### 3. Docker Based
+
+Imagine a scenario where you already have a docker application, but you want to run this daemon alongside the service,
+and be discoverable, without having to code up an integration with ranger You can use docker compose to run your service
+and this daemon as a multi container docker application<br>
 After this, your application should be ready for service discovery.
 
-### How to run
+Docker containers are available on
+the [DockerHub](https://hub.docker.com/repository/docker/tusharknaik/python-ranger-daemon).
 
-The following is the docker command to run the script, using environment variables
+The following docker command can be used to run start the daemon, using environment variables. The table below explains
+the various environment variables required to run the script
 
 | Env Variable | Description                                         |
 |--------------|-----------------------------------------------------|
@@ -92,14 +130,9 @@ from within docker)
 docker run --rm -d --network host -e RANGER_ZK=host.docker.internal:2181 -e SERVICE_NAME=python-test -e HOST=localhost -e PORT=12211 -e ENV=stage -e NAMESPACE=myorg -e HEALTH_CHECK="localhost:12211/health" --name python-ranger-daemon tusharknaik/python-ranger-daemon:1.6
 ```
 
-### Docker
-
-Docker containers are available on
-the [DockerHub](https://hub.docker.com/repository/docker/tusharknaik/python-ranger-daemon).
-
 ---
 
-### Under the hood
+## Under the hood
 
 The daemon will write data to zookeeper in the following format (datamodel from ranger):
 
@@ -115,9 +148,10 @@ The daemon will write data to zookeeper in the following format (datamodel from 
 }
 ```
 
-Updates will be puslised in the path: /$NAMESPACE/$SERVICE_NAME at a periodic intervals of --interval (default: 1 second)
+Updates will be published in the path: /$NAMESPACE/$SERVICE_NAME at a periodic intervals of --interval (default: 1
+second)
 
-**Takes care of the following :**
+**The following will be taken care of:**
 
 - Infinite retry and connection reattempts in case of zk connection issues
 - Proper cleanup of zk connections to get rid of ephemeral nodes
