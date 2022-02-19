@@ -42,10 +42,15 @@ def initial_program_setup(raw_args=None):
         logger=logger)
 
 
-def main(raw_args=None):
+def ranger_daemon_trigger(raw_args=None):
+    """
+    Pass in raw_args if you wana trigger via this method
+    eg: ['-zk', 'localhost:2181', '-s', 'myapp', '-host', 'localhost', '-p', '9090', '-e', 'stage', '-hcu', 'http://localhost:9091/healthcheck?pretty=true']
+    :param raw_args: sys.argv (arguments to the script)
+    """
     ranger_service_provider = initial_program_setup(raw_args)
     ranger_service_provider.start(True)
 
 
 if __name__ == '__main__':
-    main()
+    ranger_daemon_trigger()
