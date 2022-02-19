@@ -76,7 +76,7 @@ If you just wish to invoke the script directly, clone the project and follow alo
 like so
 
 ```shell
-python3.10 serviceprovider/ranger_daemon.py -zk localhost:2181 -s myapp -host localhost -p 12211 -n org -e stage -hcu 'http://localhost:12211/healthcheck?pretty=true'
+python3.9 serviceprovider/ranger_daemon.py -zk localhost:2181 -s myapp -host localhost -p 12211 -n org -e stage -hcu 'http://localhost:12211/healthcheck?pretty=true'
 ```
 
 ### 2. Import Based Usage
