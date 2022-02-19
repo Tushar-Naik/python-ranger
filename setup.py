@@ -1,18 +1,17 @@
 # please install python if it is not present in the system
 from setuptools import setup
+from serviceprovider import __version__
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
-with open("version.txt", "r") as fh2:
-    version = fh2.read()
 
 setup(
     name='serviceprovider',
-    version=version,
+    version=__version__,
     packages=['serviceprovider'],
     license=' License 2.0',
-    description='A service discovery service provider using zookeeper for providing updates',
+    description='The python equivalent for ranger based service discovery mechanism using zookeeper',
     author='Tushar Naik',
     author_email='tushar.knaik@gmail.com',
     keywords=['ranger', 'zookeeper', 'service discovery', 'periodic task', 'interval', 'periodic job', 'flask style',
