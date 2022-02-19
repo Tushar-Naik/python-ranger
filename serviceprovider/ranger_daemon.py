@@ -1,6 +1,6 @@
 import argparse
-import logging
 
+from serviceprovider.helper import get_default_logger
 from serviceprovider.ranger_models import ClusterDetails, ServiceDetails, UrlScheme
 from serviceprovider.service_provider import HealthCheck, RangerServiceProvider
 
@@ -17,20 +17,8 @@ python3.9 ranger_daemon.py -zk $ZK_CONNECTION_STRING -s $SERVICE_NAME -host $HOS
 
 '''
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-# create a file handler
-handler = logging.FileHandler('ranger_daemon.log')
-handler.setLevel(logging.DEBUG)
-
-# create a logging format
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-
-
-def initial_program_setup():
+def initial_program_setup(raw_args=None):
     parser = argparse.ArgumentParser(description="Utility to register a service host/port for ")
     parser.add_argument('-zk', '--zkConnectionString', help='zookeeper connection string', required=True)
     parser.add_argument('-n', '--namespace', help='namespace for discovery', default="org")
@@ -43,7 +31,10 @@ def initial_program_setup():
     parser.add_argument('-i', '--interval', help='Update interval in seconds', default=1)
     parser.add_argument('-hcu', '--healthCheckUrl', help='Url where regular health check will be done', default=None)
     parser.add_argument('-hct', '--healthCheckTimeout', help='Url where regular health check will be done', default=0.5)
-    args = parser.parse_args()
+
+    print(f'{raw_args}')
+    args = parser.parse_args(raw_args)
+    logger = get_default_logger()
     return RangerServiceProvider(
         ClusterDetails(args.zkConnectionString, args.interval),
         ServiceDetails(args.host, int(args.port), args.environment, args.namespace, args.service),
@@ -51,5 +42,10 @@ def initial_program_setup():
         logger=logger)
 
 
-ranger_service_provider = initial_program_setup()
-ranger_service_provider.start(True)
+def main(raw_args=None):
+    ranger_service_provider = initial_program_setup(raw_args)
+    ranger_service_provider.start(True)
+
+
+if __name__ == '__main__':
+    main()
