@@ -1,6 +1,6 @@
 # please install python if it is not present in the system
 from setuptools import setup
-from serviceprovider import __version__
+from serviceprovider.__version__ import __version__
 
 with open("README.md", "r") as fh:
     long_description = fh.read()

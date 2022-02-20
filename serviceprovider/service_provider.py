@@ -1,7 +1,5 @@
-import sys
 from datetime import timedelta
 import json
-import logging
 import signal
 import time
 from kazoo.retry import KazooRetry
