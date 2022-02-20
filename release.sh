@@ -23,15 +23,33 @@ version=$(echo "$oldVersion" | awk -F. -v OFS=. 'NF==1{print ++$NF}; NF>1{if(len
   echo "$init" | sed "s/$oldVersion/$version/g" >serviceprovider/__version__.py &&
   echo "$readme" | sed "s/$oldVersion/$version/g" >README.md
 
+echo "STARTING RELEASE in 2 seconds...."
+echo "Current Version: $oldVersion"
+echo "NEW VERSION: $version"
+sleep 2
+echo "Removing current distribution"
 rm dist/*
+
+# Commands below this have && which ensures that the next command only runs if the previous command was successful
+
+echo "Setup tools running to create distribution"
 python3.10 setup.py sdist &&
+  echo "Twine upload starting.." &&
   python3.10 -m twine upload dist/* &&
+  echo "Docker build" &&
   docker build -t python-ranger-daemon:"$version" . &&
+  echo "Docker Tag tusharknaik/python-ranger-daemon:$version" &&
   docker tag python-ranger-daemon:"$version" tusharknaik/python-ranger-daemon:"$version" &&
+  echo "Docker push" &&
   docker push tusharknaik/python-ranger-daemon:"$version" &&
-  git add serviceprovider/__version__.py
-git add README.md
-git commit -m "Auto incrementing version to $version"
-git tag -a "v$version" -m "$description"
-git push
-git push origin "v$version"
+  echo "Adding the changed version to git "
+git add serviceprovider/__version__.py &&
+  git add README.md &&
+  git commit -m "Auto incrementing version to $version" &&
+  echo "Creating a git tag and pushing everything" &&
+  git tag -a "v$version" -m "$description" &&
+  git push &&
+  git push origin "v$version" &&
+  echo "...."
+echo "...."
+echo ".... DONE with RELEASE of $version"
