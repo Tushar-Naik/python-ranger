@@ -23,9 +23,9 @@ version=$(echo "$oldVersion" | awk -F. -v OFS=. 'NF==1{print ++$NF}; NF>1{if(len
   echo "$init" | sed "s/$oldVersion/$version/g" >serviceprovider/__version__.py &&
   echo "$readme" | sed "s/$oldVersion/$version/g" >README.md
 
-echo "STARTING RELEASE in 2 seconds...."
 echo "Current Version: $oldVersion"
 echo "NEW VERSION: $version"
+echo "STARTING RELEASE in 2 seconds...."
 sleep 2
 echo "Removing current distribution"
 rm dist/*
