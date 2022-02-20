@@ -1,6 +1,5 @@
 # please install python if it is not present in the system
 from setuptools import setup
-from __version__ import __version__
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -8,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='serviceprovider',
-    version=__version__,
+    version='1.6.3',
     packages=['serviceprovider'],
     license=' License 2.0',
     description='The python equivalent for ranger based service discovery mechanism using zookeeper',
