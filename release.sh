@@ -16,17 +16,17 @@ if [ -z "$description" ]; then
   description="Releasing a new version"
 fi
 
-init=$(cat serviceprovider/__version__.py)
+init=$(cat __version__.py)
 readme=$(cat README.md)
 oldVersion=$(echo "$init" | grep version | sed "s/__version__='//g" | sed "s/'//g")
 version=$(echo "$oldVersion" | awk -F. -v OFS=. 'NF==1{print ++$NF}; NF>1{if(length($NF+1)>length($NF))$(NF-1)++;$NF=sprintf("%0*d", length($NF), ($NF+1)%(10^length($NF))); print}') &&
-  echo "$init" | sed "s/$oldVersion/$version/g" >serviceprovider/__version__.py &&
+  echo "$init" | sed "s/$oldVersion/$version/g" >__version__.py &&
   echo "$readme" | sed "s/$oldVersion/$version/g" >README.md
 
 echo "Current Version: $oldVersion"
 echo "NEW VERSION: $version"
-echo "STARTING RELEASE in 2 seconds...."
-sleep 2
+echo "STARTING RELEASE in 5 seconds...."
+sleep 5
 echo "Removing current distribution"
 rm dist/*
 
@@ -43,7 +43,7 @@ python3.10 setup.py sdist &&
   echo "Docker push" &&
   docker push tusharknaik/python-ranger-daemon:"$version" &&
   echo "Adding the changed version to git "
-git add serviceprovider/__version__.py &&
+git add __version__.py &&
   git add README.md &&
   git commit -m "Auto incrementing version to $version" &&
   echo "Creating a git tag and pushing everything" &&
