@@ -14,9 +14,9 @@ There are 2 sections in here.
 ## Ranger Service Provider
 
 A service provider in Ranger is something can be used to broadcast that a service is available at some host:port, where
-certain clients can connect and request services (make http calls). This broadcast is essentially done using zookeeper.
-The following python class helps you do the same for a python script It follows the same models as present in the main
-java library.
+clients can connect and request services (make http calls). This broadcast is essentially done using zookeeper. The
+following python class helps you do the same for any python based service/tool. It follows the same models as present in
+the main ranger java library.
 
 Similar details can be found at [PyPi](https://pypi.org/project/serviceprovider/)
 
@@ -49,12 +49,21 @@ ranger.start(block=True)
 ranger.stop()
 ```
 
+### Details
+
+The above sample shows how to set up a background thread, that does the job of publishing regular updates to zk. You can
+optionally provide a healthcheck url, which will receive a ping at regular intervals. A HEALTHY broadcast will only be
+done if the ping check was successful. You can check HealthCheck to customize the URL to your needs.
+
+---
+
 ## Ranger Daemon setup
 
-This section deals with using the code as a simple light daemon that can run alongside your software to provide regular
-service discovery updates to zookeeper. As usual, check [Ranger](https://github.com/appform-io/ranger) for more details.
+This section deals with using the code as a simple light daemon that can run alongside your software (but outside it) to
+provide regular service discovery updates to zookeeper. As usual, check [Ranger](https://github.com/appform-io/ranger)
+for more details.
 
-## Intent
+### Intent
 
 Ideally, you would directly use the standard Ranger java client to deeply integrate the service's health updates with
 ranger.<br>  
@@ -62,7 +71,7 @@ In scenarios where you can't do the above, you can rely on this daemon. Say you 
 for a service written in a langauge other than java, or you are unable to add the ranger dependency directly, in your
 java application.
 
-The intent of this daemon is to run along-side your application and publish updates, as long as your service is up and
+The intent of this daemon is to run along-side your software and publish updates, as long as your software is up and
 healthy. Currently, support has been added for a dockerized setup, as well as an import based custom setup. Currently,
 Support has been provided for the following:
 
@@ -97,16 +106,17 @@ ranger_daemon_trigger(sys.argv[1:])
 
 ### 3. Docker Based
 
-Imagine a scenario where you already have a docker application, but you want to run this daemon alongside the service,
-and be discoverable, without having to code up an integration with ranger You can use docker compose to run your service
-and this daemon as a multi container docker application<br>
-After this, your application should be ready for service discovery.
+Imagine a scenario where you already have a docker application, but you want to run this daemon alongside the container,
+to make the existing container discoverable, without having to code up an integration with ranger. The following is a
+solution to this problem. You can use docker compose to run your service and this daemon as a multi container docker
+application.<br>
+After this, your existing container should be ready for service discovery.
 
 Docker containers are available on
 the [DockerHub](https://hub.docker.com/repository/docker/tusharknaik/python-ranger-daemon).
 
-The following docker command can be used to run start the daemon, using environment variables. The table below explains
-the various environment variables required to run the script
+The following docker command can be used to start the daemon, using environment variables. The table below explains the
+various environment variables required to run the script
 
 | Env Variable | Description                                         |
 |--------------|-----------------------------------------------------|
@@ -134,7 +144,7 @@ docker run --rm -d --network host -e RANGER_ZK=host.docker.internal:2181 -e SERV
 
 ## Under the hood
 
-The daemon will write data to zookeeper in the following format (datamodel from ranger):
+The daemon/thread will write data to zookeeper in the following format (datamodel from ranger):
 
 ```json
 {
