@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='serviceprovider',
-    version='1.6',
+    version='1.7',
     packages=['serviceprovider'],
     license=' License 2.0',
     description='The python equivalent for ranger based service discovery mechanism using zookeeper',
