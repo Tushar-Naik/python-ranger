@@ -29,15 +29,18 @@ def initial_program_setup(raw_args=None):
                         help='Environment on which service is running',
                         required=True)
     parser.add_argument('-i', '--interval', help='Update interval in seconds', default=1)
+    parser.add_argument('-r', '--region', help='Region if shard info is being provided', default=None)
+    parser.add_argument('-t', '--tags', help='Comma separated tag values', default=None)
     parser.add_argument('-hcu', '--healthCheckUrl', help='Url where regular health check will be done', default=None)
     parser.add_argument('-hct', '--healthCheckTimeout', help='Url where regular health check will be done', default=0.5)
 
     print(f'{raw_args}')
     args = parser.parse_args(raw_args)
     logger = get_default_logger()
+    tags = args.tags.split(",")
     return RangerServiceProvider(
         ClusterDetails(args.zkConnectionString, args.interval),
-        ServiceDetails(args.host, int(args.port), args.environment, args.namespace, args.service),
+        ServiceDetails(args.host, int(args.port), args.environment, args.namespace, args.service, args.region, tags),
         HealthCheck(args.healthCheckUrl, UrlScheme.GET, logger, timeout=args.healthCheckTimeout),
         logger=logger)
 

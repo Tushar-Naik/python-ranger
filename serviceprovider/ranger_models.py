@@ -16,11 +16,13 @@ class UrlScheme(Enum):
 
 
 class NodeData(object):
-    def __init__(self, environment):
+    def __init__(self, environment, region, tags):
         self.environment = environment
+        self.region = region
+        self.tags = tags
 
     def to_dict(self):
-        return {"environment": self.environment}
+        return {"environment": self.environment, "region": self.region, "tags": self.tags}
 
 
 class ServiceNode(object):
@@ -42,12 +44,14 @@ class ServiceNode(object):
 
 
 class ServiceDetails(object):
-    def __init__(self, host, port, environment, namespace, service_name):
+    def __init__(self, host, port, environment, namespace, service_name, region=None, tags=None):
         self.host = host
         self.port = port
-        self.environment = environment
         self.namespace = namespace
         self.service_name = service_name
+        self.environment = environment
+        self.region = region
+        self.tags = tags
 
     def get_path(self):
         return f"/{self.namespace}/{self.service_name}/{self.host}:{self.port}"

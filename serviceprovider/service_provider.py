@@ -47,7 +47,7 @@ class _RangerClient(object):
         self.zk.stop()
 
     def update_tick(self, status=HealthcheckStatus.HEALTHY):
-        node_data = NodeData(self.service_details.environment)
+        node_data = NodeData(self.service_details.environment, self.service_details.region, self.service_details.tags)
         service_node = ServiceNode(self.service_details.host, self.service_details.port, node_data,
                                    status, _current_milli_time())
         data_bytes = str.encode(json.dumps(service_node.to_dict()))
