@@ -12,5 +12,5 @@ __pycache__
 bin
 *.log
 dist
-serviceprovider.egg-info
+*.egg-info
 include

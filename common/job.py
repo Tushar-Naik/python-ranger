@@ -12,5 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from serviceprovider.service_provider import RangerServiceProvider
-from serviceprovider.service_provider import HealthCheck
+from threading import Thread, Event
+
+
+class Job(Thread):
+    def __init__(self, interval, execute, *args, **kwargs):
+        Thread.__init__(self)
+        self.event = Event()
+        self.interval = interval
+        self.execute = execute
+        self.args = args
+        self.kwargs = kwargs
+
+    def stop(self):
+        self.event.set()
+        self.join()
+
+    def run(self):
+        while not self.event.wait(self.interval.total_seconds()):
+            self.execute(*self.args, **self.kwargs)

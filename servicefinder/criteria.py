@@ -12,5 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from serviceprovider.service_provider import RangerServiceProvider
-from serviceprovider.service_provider import HealthCheck
+from abc import abstractmethod
+
+from rangermodels.ranger_models import ServiceNode
+
+
+class Criteria(object):
+    """
+    A filter criteria while selecting service nodes
+    """
+
+    @abstractmethod
+    def filter(self, node: ServiceNode):
+        """
+        :param node: service node
+        :return: true if the node is supposed to be used in the selector algorithm, false if it needs to be filtered out
+        """
+        pass

@@ -12,5 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from serviceprovider.service_provider import RangerServiceProvider
-from serviceprovider.service_provider import HealthCheck
+from servicefinder.service_finder import RangerServiceFinder
+from servicefinder.node_selector import Selector, RoundRobinNodeSelector, RandomNodeSelector

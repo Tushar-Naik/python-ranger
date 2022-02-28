@@ -6,34 +6,74 @@
 Before you start, you might wanna check [Ranger](https://github.com/appform-io/ranger) for more details. You'll need it
 to follow some jargon being used in this readme.
 
-There are 2 sections in here.
+There are 3 sections in here.
 
+1. [Ranger Service Finder](#ranger-service-finder)
 1. [Ranger Service Provider](#ranger-service-provider)
 2. [Ranger Daemon](#ranger-daemon-setup)
 
-## Ranger Service Provider
+## Ranger Service Finder
 
-A service provider in Ranger is something can be used to broadcast that a service is available at some host:port, where
-clients can connect and request services (make http calls). This broadcast is essentially done using zookeeper. The
-following python class helps you do the same for any python based service/tool. It follows the same models as present in
-the main ranger java library.
-
-Similar details can be found at [PyPi](https://pypi.org/project/serviceprovider/)
+A service finder in Ranger is something can be used to discover individual host:port pairs of a distributed service which allows
+clients to connect and request for services (make http calls). This finding is done using zookeeper. The following
+python class helps you do the same for any python based service/tool. It follows the same data models as present in the
+main ranger java library. (which is paramount for this to work across languages).
+Similar details can be found at [PyPi](https://pypi.org/project/python-ranger-tn/)
 
 ### Installation
 
 ```shell
-python3.9 -m pip install serviceprovider
+python3.9 -m pip install python-ranger-tn
 ```
 
 ### Usage
 
 ```python
-from serviceprovider.ranger_models import *
+from rangermodels.ranger_models import *
+from servicefinder import RangerServiceFinder, RoundRobinNodeSelector
+
+# Create the ranger service provider
+ranger = RangerServiceFinder(cluster_details=ClusterDetails(zk_string='localhost:2181', update_interval_in_secs=1),
+                             namespace="org",
+                             services=["serviceA", "serviceB"],
+                             selector=RoundRobinNodeSelector() # optional
+                             )
+
+## Start the updates in background (this will update from zookeeper at regular intervals)
+ranger.start()
+
+## You may also start the updates and block your current thread (until we hit an interrupt)
+node = ranger.get_node("serviceA")
+node.get_host()
+
+## When you wish to stop updates
+ranger.stop()
+```
+
+### Details
+
+The above sample shows how to set up a background thread, that does the job of publishing regular updates to zk. You can
+optionally provide a healthcheck url, which will receive a ping at regular intervals. A HEALTHY broadcast will only be
+done if the ping check was successful. You can check HealthCheck to customize the URL to your needs.
+The difference between the java implementation - the list of services being discovered needs to be
+
+---
+
+## Ranger Service Provider
+
+A service provider in Ranger does the opposite. It can a way to broadcast that a service is available at some host:
+port, where clients can connect and request services (make http calls). This broadcast is essentially done using
+zookeeper. The following python class helps you do the same for any python based service/tool. Again, it follows the
+same data models as present in the main ranger java library.
+
+### Usage
+
+```python
+from rangermodels.ranger_models import *
 from serviceprovider import RangerServiceProvider, HealthCheck
 
 # Create the ranger service provider
-ranger = RangerServiceProvider(cluster_details=ClusterDetails(zk_string='localhost:2181', update_interval=1),
+ranger = RangerServiceProvider(cluster_details=ClusterDetails(zk_string='localhost:2181', update_interval_in_secs=1),
                                service_details=ServiceDetails(host='localhost', port=12211, environment='stage',
                                                               namespace='myorg',
                                                               service_name='python-test'),
@@ -154,7 +194,10 @@ The daemon/thread will write data to zookeeper in the following format (datamode
   "port": 12211,
   "nodeData": {
     "environment": "stage",
-    "tags": ["identity", "auth"],
+    "tags": [
+      "identity",
+      "auth"
+    ],
     "region": "IN-nm"
   },
   "healthcheckStatus": "healthy",

@@ -1,16 +1,32 @@
+# Copyright 2022. Tushar Naik
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import threading
 from datetime import timedelta
 import json
 import signal
 import time
+
+from kazoo.exceptions import ConnectionClosedError
 from kazoo.retry import KazooRetry
 from kazoo.client import KazooClient
 
-from serviceprovider.exceptions import StopRangerUpdate
+from common.exceptions import StopRangerUpdate
 from serviceprovider.health_check import HealthCheck
 from serviceprovider.health_check import _NoHealthCheck
-from serviceprovider.helper import get_default_logger, default_serialize_func
-from serviceprovider.job import Job
-from serviceprovider.ranger_models import ClusterDetails, ServiceDetails, HealthcheckStatus, NodeData, ServiceNode
+from common.helper import get_default_logger, default_serialize_func, current_milli_time
+from common.job import Job
+from rangermodels.ranger_models import ClusterDetails, ServiceDetails, HealthcheckStatus, NodeData, ServiceNode
 
 '''
 This is a ServiceProvider implementation for doing regular ranger updates on zookeeper
@@ -24,9 +40,25 @@ Takes care of the following :
 
 '''
 
+_lock = threading.RLock()
 
-def _current_milli_time():
-    return round(time.time() * 1000)
+
+def _acquire_lock():
+    """
+    Acquire the module-level lock for serializing access to shared data.
+
+    This should be released with _release_lock().
+    """
+    if _lock:
+        _lock.acquire()
+
+
+def _release_lock():
+    """
+    Release the module-level lock acquired by calling _acquire_lock().
+    """
+    if _lock:
+        _lock.release()
 
 
 def _service_shutdown(signum, frame):
@@ -34,6 +66,9 @@ def _service_shutdown(signum, frame):
 
 
 class _RangerClient(object):
+    """
+    An internal client for all the zk talks, with the ranger logic
+    """
     def __init__(self, zk: KazooClient, cluster_details: ClusterDetails, service_details: ServiceDetails, logger):
         self.zk = zk
         self.cluster_details = cluster_details
@@ -41,7 +76,8 @@ class _RangerClient(object):
         self.logger = logger
 
     def start(self):
-        self.zk.start()
+        if not self.zk.connected:
+            self.zk.start()
 
     def stop(self):
         self.zk.stop()
@@ -49,7 +85,7 @@ class _RangerClient(object):
     def update_tick(self, status=HealthcheckStatus.HEALTHY):
         node_data = NodeData(self.service_details.environment, self.service_details.region, self.service_details.tags)
         service_node = ServiceNode(self.service_details.host, self.service_details.port, node_data,
-                                   status, _current_milli_time())
+                                   status, current_milli_time())
         data_bytes = str.encode(json.dumps(service_node.to_dict()))
         self.logger.info(f"Updating with: {str(data_bytes)}")
         if self.zk.exists(self.service_details.get_path()):
@@ -73,27 +109,35 @@ class RangerServiceProvider(object):
         :param health_check: health check url details if any
         :param logger: optional logger
         """
-        self.cluster_details = cluster_details
-        self.service_details = service_details
+        self._cluster_details = cluster_details
+        self._service_details = service_details
         self.is_running = False
-        self.logger = logger if logger is not None else get_default_logger()
-        self.health_check = health_check if health_check is not None else _NoHealthCheck(logger)
-        self.ranger_client = _RangerClient(
-            KazooClient(hosts=self.cluster_details.zk_string,
+        self._logger = logger if logger is not None else get_default_logger()
+        self._health_check = health_check if health_check is not None else _NoHealthCheck(logger)
+        self._ranger_client = _RangerClient(
+            KazooClient(hosts=self._cluster_details.zk_string,
                         # proper infinite retries to ensure we handle network flakiness
                         connection_retry=KazooRetry(max_tries=float('inf'), delay=1, max_delay=5)),
-            self.cluster_details,
-            self.service_details,
-            self.logger)
-        self.job = None
+            self._cluster_details,
+            self._service_details,
+            self._logger)
+        self._job = None
 
     def _stop_zk_updates(self):
         if not self.is_running:
-            self.logger.info("Already stopped")
+            self._logger.info("Already stopped")
             return
-        self.logger.info("Stopping all updates to zk and cleaning up..")
-        self.ranger_client.stop()
-        self.is_running = False
+        try:
+            _acquire_lock()
+            if not self.is_running:
+                self._logger.info("Already stopped")
+                return
+            self._logger.info("Stopping all updates to zk and cleaning up..")
+            self._job.stop()
+            self._ranger_client.stop()
+            self.is_running = False
+        finally:
+            _release_lock()
 
     def _block_main_thread(self):
         signal.signal(signal.SIGTERM, _service_shutdown)
@@ -110,12 +154,15 @@ class RangerServiceProvider(object):
         Used to perform a single tick update to zookeeper. Handles error scenarios. Does healthcheck if necessary
         """
         try:
-            if self.health_check.is_healthy():
-                self.ranger_client.update_tick(HealthcheckStatus.HEALTHY)
+            if self._health_check.is_healthy():
+                self._ranger_client.update_tick(HealthcheckStatus.HEALTHY)
             else:
-                self.ranger_client.update_tick(HealthcheckStatus.UNHEALTHY)
+                self._ranger_client.update_tick(HealthcheckStatus.UNHEALTHY)
+        except ConnectionClosedError:
+            self._logger.error("Connection closed. Re-attempting")
+            self._ranger_client.start()
         except Exception:
-            self.logger.exception("Error while updating zk")
+            self._logger.exception("Error while updating zk")
 
     def start(self, block=False):
         """
@@ -123,21 +170,27 @@ class RangerServiceProvider(object):
         :param block: send block as true if you wish to block the current thread (and wait for an interrupt to stop)
         """
         if self.is_running:
-            self.logger.info("Already started")
+            self._logger.info("Already started")
             return
-        self.is_running = True
-        self.logger.info(json.dumps(self.cluster_details, default=default_serialize_func))
-        self.ranger_client.start()
-        self.job = Job(timedelta(seconds=self.cluster_details.update_interval), self._ranger_update_tick)
-        self.job.daemon = not block
-        self.job.start()
+        try:
+            _acquire_lock()
+            if self.is_running:
+                self._logger.info("Already started")
+                return
+            self.is_running = True
+            self._logger.info(json.dumps(self._cluster_details, default=default_serialize_func))
+            self._ranger_client.start()
+            self._job = Job(timedelta(seconds=self._cluster_details.update_interval_in_secs), self._ranger_update_tick)
+        finally:
+            _release_lock()
+
+        self._job.daemon = not block
+        self._job.start()
         if block:
             self._block_main_thread()
-            self.job.stop()
 
     def stop(self):
         """
         Stop zookeeper updates
         """
-        self.job.stop()
-        self.is_running = False
+        self._stop_zk_updates()

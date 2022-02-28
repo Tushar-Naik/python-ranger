@@ -12,5 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from serviceprovider.service_provider import RangerServiceProvider
-from serviceprovider.service_provider import HealthCheck
+class StopRangerUpdate(Exception):
+    """
+    Custom exception to trigger the stop of Ranger updates.
+    """
+    pass
+
+
+class RangerFinderNotStartedException(Exception):
+    """
+    Indicates that there were no healthy nodes available for the service
+    """
+    pass
