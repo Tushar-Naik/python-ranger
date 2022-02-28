@@ -13,4 +13,4 @@
 # limitations under the License.
 
 from servicefinder.service_finder import RangerServiceFinder
-from servicefinder.node_selector import Selector, RoundRobinNodeSelector, RandomNodeSelector
+from servicefinder.node_selector import *

@@ -14,7 +14,7 @@
 
 
 # please install python if it is not present in the system
-from setuptools import setup
+from setuptools import setup, find_packages
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -22,8 +22,8 @@ with open("README.md", "r") as fh:
 
 setup(
     name='python-ranger-tn',
-    version='1.8',
-    packages=['serviceprovider', 'servicefinder'],
+    version='1.8.1',
+    packages=find_packages(),
     license=' License 2.0',
     description='The python equivalent for ranger based service discovery mechanism using zookeeper',
     author='Tushar Naik',
@@ -34,7 +34,6 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/Tushar-Naik/python-ranger-daemon",
     include_package_data=True,
-    py_modules=['serviceprovider', 'servicefinder'],
     install_requires=[
         'requests',
         'kazoo',

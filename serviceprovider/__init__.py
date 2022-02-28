@@ -12,5 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from serviceprovider.service_provider import RangerServiceProvider
-from serviceprovider.service_provider import HealthCheck
+from serviceprovider.service_provider import RangerServiceProvider, HealthCheck
