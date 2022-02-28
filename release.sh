@@ -57,8 +57,8 @@ python3.10 setup.py sdist &&
   docker tag python-ranger-daemon:"$version" tusharknaik/python-ranger-daemon:"$version" &&
   echo "Docker push" &&
   docker push tusharknaik/python-ranger-daemon:"$version" &&
-  echo "Adding the changed version to git "
-git add setup.py &&
+  echo "Adding the changed version to git " &&
+  git add setup.py &&
   git add README.md &&
   git commit -m "Auto incrementing version to $version" &&
   echo "Creating a git tag and pushing everything" &&
