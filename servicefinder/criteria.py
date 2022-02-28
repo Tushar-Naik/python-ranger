@@ -26,6 +26,7 @@ class Criteria(object):
     def filter(self, node: ServiceNode):
         """
         :param node: service node
-        :return: true if the node is supposed to be used in the selector algorithm, false if it needs to be filtered out
+        :return: true if the node is supposed to be used when the selector algorithm runs, false if it needs to
+        be filtered out and excluded
         """
         pass

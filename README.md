@@ -36,17 +36,17 @@ from servicefinder import RangerServiceFinder, RoundRobinNodeSelector
 ranger = RangerServiceFinder(cluster_details=ClusterDetails(zk_string='localhost:2181', update_interval_in_secs=1),
                              namespace="org",
                              services=["serviceA", "serviceB"],
-                             selector=RoundRobinNodeSelector() # optional
-                             )
+                             selector=RoundRobinNodeSelector()) # optional
 
 ## Start the updates in background (this will update from zookeeper at regular intervals)
 ranger.start()
 
-## You may also start the updates and block your current thread (until we hit an interrupt)
-node = ranger.get_node("serviceA")
-node.get_host()
 
-## When you wish to stop updates
+node = ranger.get_node("serviceA")
+
+nodes = ranger.get_all_nodes("serviceB")  ## to get the full list of healthy nodes
+
+## When you wish to clean up
 ranger.stop()
 ```
 

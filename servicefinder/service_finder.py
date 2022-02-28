@@ -142,9 +142,9 @@ class RangerServiceFinder(object):
         self._services = services
         self._namespace = namespace
         self.is_running = False
-        self.selector = selector
+        self._selector = selector
         self._logger = logger if logger is not None else get_default_logger()
-        self.ranger_client = _RangerClient(
+        self._ranger_client = _RangerClient(
             KazooClient(hosts=self._cluster_details.zk_string,
                         read_only=True,  # since we will only be doing reading for finding services
                         # proper infinite retries to ensure we handle network flakiness
@@ -152,18 +152,18 @@ class RangerServiceFinder(object):
             self._namespace,
             self._services,
             self._logger)
-        self.job = None
-        self.criteria_filter = criteria_filter
-        self.service_mapping = {}
-        self.zombie_check_threshold_time_in_ms = zombie_check_threshold_time_in_ms
+        self._job = None
+        self._criteria_filter = criteria_filter
+        self._service_mapping = {}
+        self._zombie_check_threshold_time_in_ms = zombie_check_threshold_time_in_ms
 
     def _stop_zk_updates(self):
         if not self.is_running:
             self._logger.info("Already stopped")
             return
         self._logger.info("Stopping all updates from zk and cleaning up..")
-        self.job.stop()
-        self.ranger_client.stop()
+        self._job.stop()
+        self._ranger_client.stop()
         self.is_running = False
 
     def _check_zk_updates(self):
@@ -171,9 +171,9 @@ class RangerServiceFinder(object):
         Used to perform a single tick update to zookeeper. Handles error scenarios. Does healthcheck if necessary
         """
         try:
-            new_mappings = self.ranger_client.get_nodes()
+            new_mappings = self._ranger_client.get_nodes()
             if new_mappings is not None:
-                self.service_mapping = new_mappings
+                self._service_mapping = new_mappings
         except Exception:
             self._logger.exception("Error while updating zk")
 
@@ -191,15 +191,15 @@ class RangerServiceFinder(object):
                 return
             self.is_running = True
             self._logger.info(json.dumps(self._cluster_details, default=default_serialize_func))
-            self.ranger_client.start()
-            self.job = Job(timedelta(seconds=self._cluster_details.update_interval_in_secs), self._check_zk_updates)
+            self._ranger_client.start()
+            self._job = Job(timedelta(seconds=self._cluster_details.update_interval_in_secs), self._check_zk_updates)
         finally:
             _release_lock()
 
         if inline:
             self._check_zk_updates()
-        self.job.daemon = True
-        self.job.start()
+        self._job.daemon = True
+        self._job.start()
 
     def stop(self):
         """
@@ -209,14 +209,14 @@ class RangerServiceFinder(object):
 
     def _is_service_node_healthy(self, node: ServiceNode):
         return node.healthcheck_status == HealthcheckStatus.HEALTHY \
-               and current_milli_time() - node.last_updated_timestamp <= self.zombie_check_threshold_time_in_ms
+               and current_milli_time() - node.last_updated_timestamp <= self._zombie_check_threshold_time_in_ms
 
     def get_node(self, service):
         """
         :param service:
-        :return: one of the healthy nodes using the registered selector logic
+        :return: one of the healthy nodes using the registered selector logic, None if there are no nodes
         """
-        return self.selector.select(self.get_all_nodes(service))
+        return self._selector.select(self.get_all_nodes(service))
 
     def get_all_nodes(self, service):
         """
@@ -229,14 +229,14 @@ class RangerServiceFinder(object):
         if service not in self._services:
             self._logger.warning(f"service:{service} not registered in ServiceFinder. Registered:{self._services}")
             return None
-        if service not in self.service_mapping:
+        if service not in self._service_mapping:
             self._logger.warning(f"No nodes found for service:{service}")
             return None
-        nodes = self.service_mapping[service]
+        nodes = self._service_mapping[service]
         if len(nodes) == 0:
             self._logger.warning(f"No nodes found for service:{service}")
             return None
         healthy_nodes = list(filter(lambda x: self._is_service_node_healthy(x), nodes))
-        if self.criteria_filter is not None:
-            healthy_nodes = list(filter(lambda x: self.criteria_filter.filter(x), nodes))
+        if self._criteria_filter is not None:
+            healthy_nodes = list(filter(lambda x: self._criteria_filter.filter(x), nodes))
         return healthy_nodes
