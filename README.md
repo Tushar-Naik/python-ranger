@@ -14,10 +14,11 @@ There are 3 sections in here.
 
 ## Ranger Service Finder
 
-A service finder in Ranger is something can be used to discover individual host:port pairs of a distributed service which allows
-clients to connect and request for services (make http calls). This finding is done using zookeeper. The following
-python class helps you do the same for any python based service/tool. It follows the same data models as present in the
-main ranger java library. (which is paramount for this to work across languages).
+A service finder in Ranger is something can be used to discover individual host:port pairs of a distributed service
+which allows clients to connect and request for services (make http calls). This finding is done using zookeeper. The
+following python class helps you do the same for any python based service/tool. It follows the same data models as
+present in the main ranger java library. (which is paramount for this to work across languages).
+
 Similar details can be found at [PyPi](https://pypi.org/project/python-ranger-tn/)
 
 ### Installation
@@ -29,22 +30,29 @@ python3.9 -m pip install python-ranger-tn
 ### Usage
 
 ```python
+import requests
 from rangermodels import *
 from servicefinder import RangerServiceFinder, RoundRobinNodeSelector
 
-# Create the ranger service provider
+## Create the ranger service provider
 ranger = RangerServiceFinder(cluster_details=ClusterDetails(zk_string='localhost:2181', update_interval_in_secs=1),
                              namespace="org",
                              services=["serviceA", "serviceB"],
-                             selector=RoundRobinNodeSelector()) # optional
+                             selector=RoundRobinNodeSelector())  # optional
+# or in one line
+ranger = RangerServiceFinder(ClusterDetails('localhost:2181'), "org", ["serviceA", "serviceB"])
 
-## Start the updates in background (this will update from zookeeper at regular intervals)
+## Start the updates in background (this is important)
 ranger.start()
 
-
+## Get one of the healthy nodes to make requests
 node = ranger.get_node("serviceA")
+response = requests.get(node.get_endpoint() + "/my/api")
+node = ranger.get_node("serviceA")
+response_again = requests.get(node.get_endpoint(secure=True) + "/my/secure/api")
 
-nodes = ranger.get_all_nodes("serviceB")  ## to get the full list of healthy nodes
+## to get the full list of healthy nodes
+nodes = ranger.get_all_nodes("serviceB")
 
 ## When you wish to clean up
 ranger.stop()
@@ -52,10 +60,12 @@ ranger.stop()
 
 ### Details
 
-The above sample shows how to set up a background thread, that does the job of publishing regular updates to zk. You can
-optionally provide a healthcheck url, which will receive a ping at regular intervals. A HEALTHY broadcast will only be
-done if the ping check was successful. You can check HealthCheck to customize the URL to your needs.
-The difference between the java implementation - the list of services being discovered needs to be
+The above sample shows how to set up a service finder for 2 services. You get the node and then fetch the relevant
+details from the node. There would be one background thread created, that continuously refreshes updates from zookeeper.
+There is support for being able to apply a custom criteria based filter just like in the java lib(check criteria_filter)
+The only difference you might see from the java implementation, is the registration of services before the start (In the
+java lib, the expectation is to create one service finder per service, here we create one finder for all services that
+may be required for by your python app)
 
 ---
 
@@ -78,6 +88,10 @@ ranger = RangerServiceProvider(cluster_details=ClusterDetails(zk_string='localho
                                                               namespace='myorg',
                                                               service_name='python-test'),
                                health_check=HealthCheck(url='localhost:12211/health', scheme=UrlScheme.GET))
+
+## Or in 2 lines
+ranger = RangerServiceProvider(ClusterDetails('localhost:2181'),
+                               ServiceDetails('localhost', 12211, 'stage', 'myorg', 'python-test'))
 
 ## Start the updates in background (this will update zookeeper at regular intervals)
 ranger.start()
