@@ -135,8 +135,8 @@ Support has been provided for the following:
 
 ### 1. Simple usage
 
-If you just wish to invoke the script directly, clone the project and follow along the helper. You command will look
-like so
+If you just wish to invoke the script directly, clone the project and follow along the helper. Your command would look
+something like this
 
 ```shell
 python3.9 serviceprovider/ranger_daemon.py -zk localhost:2181 -s myapp -host localhost -p 12211 -n org -e stage -hcu 'http://localhost:12211/healthcheck?pretty=true'
@@ -148,7 +148,7 @@ You can also choose to run the daemon from within another python file, by forwar
 the package first, as shown below
 
 ```shell
-python3.9 -m pip install serviceprovider
+python3.9 -m pip install python-ranger-tn
 ```
 
 ```python
