@@ -22,7 +22,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='python-ranger-tn',
-    version='1.8.2',
+    version='1.8.3',
     packages=find_packages(),
     license=' License 2.0',
     description='The python equivalent for ranger based service discovery mechanism using zookeeper',
