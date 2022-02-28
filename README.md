@@ -29,7 +29,7 @@ python3.9 -m pip install python-ranger-tn
 ### Usage
 
 ```python
-from rangermodels.ranger_models import *
+from rangermodels import *
 from servicefinder import RangerServiceFinder, RoundRobinNodeSelector
 
 # Create the ranger service provider
@@ -69,7 +69,7 @@ same data models as present in the main ranger java library.
 ### Usage
 
 ```python
-from rangermodels.ranger_models import *
+from rangermodels import *
 from serviceprovider import RangerServiceProvider, HealthCheck
 
 # Create the ranger service provider

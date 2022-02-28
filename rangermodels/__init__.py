@@ -1,1 +1,1 @@
-from rangermodels import *
+from rangermodels.ranger_models import *
