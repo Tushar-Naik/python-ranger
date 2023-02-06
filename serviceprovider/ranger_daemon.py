@@ -51,7 +51,7 @@ def initial_program_setup(raw_args=None):
     print(f'{raw_args}')
     args = parser.parse_args(raw_args)
     logger = get_default_logger()
-    tags = args.tags.split(",")
+    tags = args.tags.split(",") if args.tags is not None else None
     return RangerServiceProvider(
         ClusterDetails(args.zkConnectionString, args.interval),
         ServiceDetails(args.host, int(args.port), args.environment, args.namespace, args.service, args.region, tags),

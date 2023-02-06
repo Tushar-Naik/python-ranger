@@ -22,8 +22,6 @@ from kazoo.retry import KazooRetry
 from kazoo.client import KazooClient
 
 from common.exceptions import StopRangerUpdate
-from servicefinder import RangerServiceFinder
-from servicefinder.criteria import Criteria
 from serviceprovider.health_check import HealthCheck
 from serviceprovider.health_check import _NoHealthCheck
 from common.helper import get_default_logger, default_serialize_func, current_milli_time
