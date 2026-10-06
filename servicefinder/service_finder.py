@@ -59,7 +59,9 @@ class _RangerClient(object):
         self.logger = logger
 
     def start(self):
-        self.zk.start()
+        # mirrors the provider: starting an already connected client raises
+        if not self.zk.connected:
+            self.zk.start()
 
     def stop(self):
         self.zk.stop()

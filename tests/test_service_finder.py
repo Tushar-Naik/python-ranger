@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from unittest import mock
+
 import pytest
 
+from common.exceptions import RangerFinderNotStartedException
 from common.helper import current_milli_time
 from rangermodels.ranger_models import (
     ClusterDetails,
@@ -22,7 +25,7 @@ from rangermodels.ranger_models import (
     ServiceNode,
 )
 from servicefinder.criteria import Criteria
-from servicefinder.service_finder import RangerServiceFinder
+from servicefinder.service_finder import RangerServiceFinder, _RangerClient
 
 NAMESPACE = "testns"
 SERVICE = "testsvc"
@@ -109,3 +112,49 @@ class TestCriteriaFilterRespectsHealth:
 
         for _ in range(20):
             assert finder.get_node(SERVICE).get_host() == "healthy-host"
+
+
+class TestFinderClientStart:
+    """
+    Regression tests: the finder started its kazoo client unconditionally, unlike the
+    provider, so a caller supplying an already connected client hit an exception.
+    """
+
+    def _client(self, connected):
+        zk = mock.Mock()
+        zk.connected = connected
+        return _RangerClient(zk, NAMESPACE, [SERVICE], mock.Mock()), zk
+
+    def test_disconnected_client_is_started(self):
+        client, zk = self._client(connected=False)
+        client.start()
+        zk.start.assert_called_once_with()
+
+    def test_already_connected_client_is_not_restarted(self):
+        client, zk = self._client(connected=True)
+        client.start()
+        zk.start.assert_not_called()
+
+    def test_stop_always_stops(self):
+        client, zk = self._client(connected=True)
+        client.stop()
+        zk.stop.assert_called_once_with()
+
+
+class TestFinderGuards:
+    def test_get_all_nodes_before_start_raises(self):
+        finder = RangerServiceFinder(ClusterDetails("localhost:2181"), NAMESPACE, [SERVICE])
+        with pytest.raises(RangerFinderNotStartedException):
+            finder.get_all_nodes(SERVICE)
+
+    def test_unregistered_service_returns_none(self):
+        finder = _finder([_node("host")])
+        assert finder.get_all_nodes("unregistered") is None
+
+    def test_service_with_no_mapping_returns_none(self):
+        finder = _finder([_node("host")])
+        finder._service_mapping = {}
+        assert finder.get_all_nodes(SERVICE) is None
+
+    def test_service_with_empty_node_list_returns_none(self):
+        assert _finder([]).get_all_nodes(SERVICE) is None
