@@ -16,16 +16,14 @@ import json
 import threading
 from datetime import timedelta
 
-from kazoo.client import KazooClient
-from kazoo.exceptions import NoNodeError
-from kazoo.retry import KazooRetry
-
 from common.exceptions import RangerFinderNotStartedException
 from common.job import Job
-from rangermodels.ranger_models import ClusterDetails, ServiceNode, HealthcheckStatus
+from rangermodels.ranger_models import ClusterDetails, Service, ServiceNode, HealthcheckStatus
 from common.helper import get_default_logger, current_milli_time, default_serialize_func
 from servicefinder.criteria import Criteria
 from servicefinder.node_selector import Selector, RandomNodeSelector
+from transport.base import NodeDataSource
+from transport.zk import ZkNodeDataSource
 
 _lock = threading.RLock()
 
@@ -50,72 +48,39 @@ def _release_lock():
 
 class _RangerClient(object):
     """
-    An internal client class used to implement all the zk talks
+    Pulls the nodes of every registered service out of the configured source.
     """
-    def __init__(self, zk: KazooClient, path, services, logger, node_data_deserializer=None):
-        self.zk = zk
-        self.path = path
+
+    def __init__(self, source: NodeDataSource, namespace, services, logger):
+        self.source = source
+        self.namespace = namespace
         self.services = services
         self.logger = logger
-        self.node_data_deserializer = node_data_deserializer
 
     def start(self):
-        # mirrors the provider: starting an already connected client raises
-        if not self.zk.connected:
-            self.zk.start()
+        self.source.start()
 
     def stop(self):
-        self.zk.stop()
+        self.source.stop()
 
-    def get_nodes(self):
-        self.logger.debug(f"Fetching updates from zk for {self.services}")
+    def get_nodes(self, previous=None):
+        """
+        :param previous: the mapping currently held by the finder, used as the fallback
+        for any service whose lookup failed
+        :return: mapping of service name to its list of nodes
+        """
+        previous = previous if previous is not None else {}
+        self.logger.debug(f"Fetching updates from the registry for {self.services}")
         service_nodes = {}
         for service in self.services:
-            children = self._fetch_children(service)
-            nodes = []
-            for child in children:
-                service_node = self._get_data(service, child)
-                if service_node is not None:
-                    nodes.append(service_node)
+            nodes = self.source.nodes(Service(self.namespace, service))
+            if nodes is None:
+                # the lookup failed, hold on to whatever we knew rather than
+                # declaring the service node-less
+                self.logger.warning(f"Keeping the previous view of service:{service}")
+                nodes = previous.get(service, [])
             service_nodes[service] = nodes
         return service_nodes
-
-    def _fetch_children(self, service):
-        path = self._get_path(service)
-        try:
-            children = self.zk.get_children(path)
-            return children
-        except NoNodeError:
-            self.logger.warning(f"No service nodes found for path:{path}")
-            return []
-
-    def _get_path(self, service):
-        return f"/{self.path}/{service}"
-
-    def _create_service_node(self, args):
-        self.logger.info(f"{args}")
-        return ServiceNode(**args)
-
-    def _convert_to_service_node(self, node_data_bytes):
-        try:
-            return ServiceNode.create(node_data_bytes, node_data_deserializer=self.node_data_deserializer)
-        except Exception:
-            self.logger.exception("Unable to parse node data into ServiceNode")
-            return None
-
-    def _get_data(self, service, node):
-        path = self._get_path(service)
-        try:
-            node_path = f"{path}/{node}"
-            node_data_json, stats = self.zk.get(node_path)
-            self.logger.debug(f"found {node_data_json}")
-            return self._convert_to_service_node(node_data_json)
-        except NoNodeError:
-            self.logger.warning(f"No nodes found for path:{path}")
-            return None
-        except Exception:
-            self.logger.exception("Something went wrong while getting node data")
-            return None
 
 
 class RangerServiceFinder(object):
@@ -131,9 +96,11 @@ class RangerServiceFinder(object):
                  criteria_filter: Criteria = None,
                  logger=None,
                  zombie_check_threshold_time_in_ms: int = 60000,
-                 node_data_deserializer=None):
+                 node_data_deserializer=None,
+                 node_data_source: NodeDataSource = None):
         """
-        :param cluster_details: Zookeeper cluster details
+        :param cluster_details: registry details; the zookeeper connection string is only read
+        when the default zookeeper source is used, the update interval always applies
         :param namespace: ranger namespace (name of org)
         :param services: services to be registered for finding
         :param selector: custom selector logic when selecting one of the many healthy nodes available for the service
@@ -144,6 +111,8 @@ class RangerServiceFinder(object):
         :param node_data_deserializer: optional callable applied to the raw nodeData mapping of every discovered
         node. Node data is left as a plain mapping when this is not supplied, which keeps the payload generic.
         Pass ``LegacyNodeData.from_dict`` to get back the pre 2.0 environment/region/tags object.
+        :param node_data_source: registry backend to read from. Defaults to zookeeper, built from
+        cluster_details.zk_string
         """
         self._cluster_details = cluster_details
         self._services = services
@@ -151,15 +120,12 @@ class RangerServiceFinder(object):
         self.is_running = False
         self._selector = selector
         self._logger = logger if logger is not None else get_default_logger()
-        self._ranger_client = _RangerClient(
-            KazooClient(hosts=self._cluster_details.zk_string,
-                        read_only=True,  # since we will only be doing reading for finding services
-                        # proper infinite retries to ensure we handle network flakiness
-                        connection_retry=KazooRetry(max_tries=float('inf'), delay=0.2, max_delay=2)),
-            self._namespace,
-            self._services,
-            self._logger,
-            node_data_deserializer)
+        if node_data_source is None:
+            node_data_source = ZkNodeDataSource(zk_string=self._cluster_details.zk_string,
+                                                namespace=self._namespace,
+                                                logger=self._logger,
+                                                node_data_deserializer=node_data_deserializer)
+        self._ranger_client = _RangerClient(node_data_source, self._namespace, self._services, self._logger)
         self._job = None
         self._criteria_filter = criteria_filter
         self._service_mapping = {}
@@ -169,25 +135,25 @@ class RangerServiceFinder(object):
         if not self.is_running:
             self._logger.info("Already stopped")
             return
-        self._logger.info("Stopping all updates from zk and cleaning up..")
+        self._logger.info("Stopping all updates from the registry and cleaning up..")
         self._job.stop()
         self._ranger_client.stop()
         self.is_running = False
 
     def _check_zk_updates(self):
         """
-        Used to perform a single tick update to zookeeper. Handles error scenarios. Does healthcheck if necessary
+        Perform a single refresh of the node view against the registry. Handles error scenarios.
         """
         try:
-            new_mappings = self._ranger_client.get_nodes()
+            new_mappings = self._ranger_client.get_nodes(self._service_mapping)
             if new_mappings is not None:
                 self._service_mapping = new_mappings
         except Exception:
-            self._logger.exception("Error while updating zk")
+            self._logger.exception("Error while refreshing nodes from the registry")
 
     def start(self, inline=False):
         """
-        Creates a Thread that checks for updates in zookeeper at regular intervals
+        Creates a Thread that checks the registry for updates at regular intervals
         """
         if self.is_running:
             self._logger.info("Already started")
@@ -211,7 +177,7 @@ class RangerServiceFinder(object):
 
     def stop(self):
         """
-        Stop zookeeper updates
+        Stop registry updates
         """
         self._stop_zk_updates()
 
