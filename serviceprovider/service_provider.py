@@ -18,8 +18,6 @@ import signal
 import time
 
 from kazoo.exceptions import ConnectionClosedError
-from kazoo.retry import KazooRetry
-from kazoo.client import KazooClient
 
 from common.exceptions import StopRangerUpdate
 from serviceprovider.health_check import HealthCheck
@@ -27,14 +25,19 @@ from serviceprovider.health_check import _NoHealthCheck
 from common.helper import get_default_logger, default_serialize_func, current_milli_time
 from common.job import Job
 from rangermodels.ranger_models import ClusterDetails, ServiceDetails, HealthcheckStatus, ServiceNode, UNSET_TIMESTAMP
+from transport.base import NodeDataSink
+from transport.zk import ZkNodeDataSink
 
 '''
-This is a ServiceProvider implementation for doing regular ranger updates on zookeeper
+This is a ServiceProvider implementation for doing regular ranger updates on a ranger registry.
 You may run this in background or run it in foreground by blocking your current thread.
 
+The registry is reached through a NodeDataSink, which defaults to zookeeper. Any other sink
+implementation can be handed in instead, the publishing logic stays the same.
+
 Takes care of the following :
-- Infinite retry and connection reattempts in case of zk connection issues 
-- Proper cleanup of zk connections to get rid of ephemeral nodes
+- Infinite retry and connection reattempts in case of connection issues
+- Proper cleanup of connections to get rid of ephemeral nodes
 - Proper logging  
 = Does continuous health check pings on a particular health check url if required [optional]
 
@@ -67,23 +70,23 @@ def _service_shutdown(signum, frame):
 
 class _RangerClient(object):
     """
-    An internal client for all the zk talks, with the ranger logic
+    Builds the ServiceNode for every tick and hands it to the configured sink.
     """
-    def __init__(self, zk: KazooClient, cluster_details: ClusterDetails, service_details: ServiceDetails, logger):
-        self.zk = zk
-        self.cluster_details = cluster_details
+
+    def __init__(self, sink: NodeDataSink, service_details: ServiceDetails, logger):
+        self.sink = sink
         self.service_details = service_details
+        self.service = service_details.get_service()
         self.logger = logger
         # tracks the instant the node last transitioned into a healthy state, so
         # that healthySinceTimeStamp can be published alongside every update
         self._healthy_since = UNSET_TIMESTAMP
 
     def start(self):
-        if not self.zk.connected:
-            self.zk.start()
+        self.sink.start()
 
     def stop(self):
-        self.zk.stop()
+        self.sink.stop()
 
     def _healthy_since_timestamp(self, status, now):
         if status != HealthcheckStatus.HEALTHY:
@@ -92,24 +95,21 @@ class _RangerClient(object):
             self._healthy_since = now
         return self._healthy_since
 
-    def update_tick(self, status=HealthcheckStatus.HEALTHY):
+    def build_node(self, status=HealthcheckStatus.HEALTHY):
         now = current_milli_time()
-        service_node = ServiceNode(host=self.service_details.host,
-                                   port=self.service_details.port,
-                                   node_data=self.service_details.get_node_data(),
-                                   healthcheck_status=status,
-                                   last_updated_timestamp=now,
-                                   routing_weight=self.service_details.routing_weight,
-                                   healthy_since_timestamp=self._healthy_since_timestamp(status, now),
-                                   port_scheme=self.service_details.port_scheme)
-        data_bytes = str.encode(json.dumps(service_node.to_dict()))
-        self.logger.info(f"Updating with: {str(data_bytes)}")
-        if self.zk.exists(self.service_details.get_path()):
-            self.zk.set(self.service_details.get_path(), data_bytes)
-        else:
-            # ensure that you create only ephemeral nodes
-            self.zk.ensure_path(self.service_details.get_root_path())
-            self.zk.create(self.service_details.get_path(), data_bytes, ephemeral=True)
+        return ServiceNode(host=self.service_details.host,
+                           port=self.service_details.port,
+                           node_data=self.service_details.get_node_data(),
+                           healthcheck_status=status,
+                           last_updated_timestamp=now,
+                           routing_weight=self.service_details.routing_weight,
+                           healthy_since_timestamp=self._healthy_since_timestamp(status, now),
+                           port_scheme=self.service_details.port_scheme)
+
+    def update_tick(self, status=HealthcheckStatus.HEALTHY):
+        service_node = self.build_node(status)
+        self.logger.debug(f"Updating with: {service_node}")
+        return self.sink.update_health(self.service, service_node)
 
 
 class RangerServiceProvider(object):
@@ -118,25 +118,24 @@ class RangerServiceProvider(object):
     """
 
     def __init__(self, cluster_details: ClusterDetails, service_details: ServiceDetails,
-                 health_check: HealthCheck = None, logger=None):
+                 health_check: HealthCheck = None, logger=None, node_data_sink: NodeDataSink = None):
         """
-        :param cluster_details: Zookeeper cluster details
+        :param cluster_details: registry details; the zookeeper connection string is only read
+        when the default zookeeper sink is used, the update interval always applies
         :param service_details: Service details like name, host, port etc
         :param health_check: health check url details if any
         :param logger: optional logger
+        :param node_data_sink: registry backend to publish to. Defaults to zookeeper, built from
+        cluster_details.zk_string
         """
         self._cluster_details = cluster_details
         self._service_details = service_details
         self.is_running = False
         self._logger = logger if logger is not None else get_default_logger()
         self._health_check = health_check if health_check is not None else _NoHealthCheck(logger)
-        self._ranger_client = _RangerClient(
-            KazooClient(hosts=self._cluster_details.zk_string,
-                        # proper infinite retries to ensure we handle network flakiness
-                        connection_retry=KazooRetry(max_tries=float('inf'), delay=1, max_delay=5)),
-            self._cluster_details,
-            self._service_details,
-            self._logger)
+        if node_data_sink is None:
+            node_data_sink = ZkNodeDataSink(zk_string=self._cluster_details.zk_string, logger=self._logger)
+        self._ranger_client = _RangerClient(node_data_sink, self._service_details, self._logger)
         self._job = None
 
     def _stop_zk_updates(self):
@@ -148,7 +147,7 @@ class RangerServiceProvider(object):
             if not self.is_running:
                 self._logger.info("Already stopped")
                 return
-            self._logger.info("Stopping all updates to zk and cleaning up..")
+            self._logger.info("Stopping all updates to the registry and cleaning up..")
             self._job.stop()
             self._ranger_client.stop()
             self.is_running = False
@@ -167,22 +166,25 @@ class RangerServiceProvider(object):
 
     def _ranger_update_tick(self):
         """
-        Used to perform a single tick update to zookeeper. Handles error scenarios. Does healthcheck if necessary
+        Perform a single update tick against the registry. Handles error scenarios.
+        Does healthcheck if necessary
         """
         try:
-            if self._health_check.is_healthy():
-                self._ranger_client.update_tick(HealthcheckStatus.HEALTHY)
-            else:
-                self._ranger_client.update_tick(HealthcheckStatus.UNHEALTHY)
+            status = HealthcheckStatus.HEALTHY if self._health_check.is_healthy() else HealthcheckStatus.UNHEALTHY
+            if self._ranger_client.update_tick(status) is None:
+                # the sink already logged the cause; re-establish the connection so the
+                # next tick has a chance of succeeding
+                self._logger.error("Update was not acknowledged by the registry. Re-attempting")
+                self._ranger_client.start()
         except ConnectionClosedError:
             self._logger.error("Connection closed. Re-attempting")
             self._ranger_client.start()
         except Exception:
-            self._logger.exception("Error while updating zk")
+            self._logger.exception("Error while updating the registry")
 
     def start(self, block=False):
         """
-        Creates a Thread that updates zookeeper with service health state updates at regular intervals
+        Creates a Thread that updates the registry with service health state updates at regular intervals
         :param block: send block as true if you wish to block the current thread (and wait for an interrupt to stop)
         """
         if self.is_running:
@@ -207,6 +209,6 @@ class RangerServiceProvider(object):
 
     def stop(self):
         """
-        Stop zookeeper updates
+        Stop registry updates
         """
         self._stop_zk_updates()
