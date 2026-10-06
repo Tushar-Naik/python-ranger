@@ -87,7 +87,9 @@ class ServiceNode(object):
                    last_updated_timestamp=int(node_data_json['lastUpdatedTimeStamp']))
 
     def to_dict(self):
-        return {"host": self.host, "port": self.port, "nodeData": self.node_data.to_dict(),
+        # node_data is optional on the wire, so create() may legitimately leave it unset
+        node_data = self.node_data.to_dict() if self.node_data is not None else {}
+        return {"host": self.host, "port": self.port, "nodeData": node_data,
                 "healthcheckStatus": self.healthcheck_status.value, "lastUpdatedTimeStamp": self.last_updated_timestamp}
 
     def get_host(self):
