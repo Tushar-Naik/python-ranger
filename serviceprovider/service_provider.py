@@ -26,7 +26,7 @@ from serviceprovider.health_check import HealthCheck
 from serviceprovider.health_check import _NoHealthCheck
 from common.helper import get_default_logger, default_serialize_func, current_milli_time
 from common.job import Job
-from rangermodels.ranger_models import ClusterDetails, ServiceDetails, HealthcheckStatus, NodeData, ServiceNode
+from rangermodels.ranger_models import ClusterDetails, ServiceDetails, HealthcheckStatus, ServiceNode, UNSET_TIMESTAMP
 
 '''
 This is a ServiceProvider implementation for doing regular ranger updates on zookeeper
@@ -74,6 +74,9 @@ class _RangerClient(object):
         self.cluster_details = cluster_details
         self.service_details = service_details
         self.logger = logger
+        # tracks the instant the node last transitioned into a healthy state, so
+        # that healthySinceTimeStamp can be published alongside every update
+        self._healthy_since = UNSET_TIMESTAMP
 
     def start(self):
         if not self.zk.connected:
@@ -82,10 +85,23 @@ class _RangerClient(object):
     def stop(self):
         self.zk.stop()
 
+    def _healthy_since_timestamp(self, status, now):
+        if status != HealthcheckStatus.HEALTHY:
+            self._healthy_since = UNSET_TIMESTAMP
+        elif self._healthy_since == UNSET_TIMESTAMP:
+            self._healthy_since = now
+        return self._healthy_since
+
     def update_tick(self, status=HealthcheckStatus.HEALTHY):
-        node_data = NodeData(self.service_details.environment, self.service_details.region, self.service_details.tags)
-        service_node = ServiceNode(self.service_details.host, self.service_details.port, node_data,
-                                   status, current_milli_time())
+        now = current_milli_time()
+        service_node = ServiceNode(host=self.service_details.host,
+                                   port=self.service_details.port,
+                                   node_data=self.service_details.get_node_data(),
+                                   healthcheck_status=status,
+                                   last_updated_timestamp=now,
+                                   routing_weight=self.service_details.routing_weight,
+                                   healthy_since_timestamp=self._healthy_since_timestamp(status, now),
+                                   port_scheme=self.service_details.port_scheme)
         data_bytes = str.encode(json.dumps(service_node.to_dict()))
         self.logger.info(f"Updating with: {str(data_bytes)}")
         if self.zk.exists(self.service_details.get_path()):
