@@ -24,7 +24,7 @@ setup(
     name='python-ranger-tn',
     version='1.8.4',
     packages=find_packages(),
-    license=' License 2.0',
+    license='Apache License 2.0',
     description='The python equivalent for ranger based service discovery mechanism using zookeeper',
     author='Tushar Naik',
     author_email='tushar.knaik@gmail.com',
@@ -32,7 +32,7 @@ setup(
               'decorator', 'tushar'],
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/Tushar-Naik/python-ranger-daemon",
+    url="https://github.com/Tushar-Naik/python-ranger",
     include_package_data=True,
     install_requires=[
         'requests',
