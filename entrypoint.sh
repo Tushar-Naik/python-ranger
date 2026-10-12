@@ -39,9 +39,15 @@ trap 'kill ${!}; term_handler' SIGTERM
 
 ls
 
-# run python ranger daemon
-echo "Publishing ranger updates on cluster:[$RANGER_ZK] with name=$SERVICE_NAME host=$HOST port=$PORT env=$ENV under namespace=$NAMESPACE and healthCheckUrl=$HEALTH_CHECK"
-PYTHONPATH=../:. python3.9 serviceprovider/ranger_daemon.py -zk $RANGER_ZK -s $SERVICE_NAME -host $HOST -p $PORT -e $ENV -n $NAMESPACE -hcu $HEALTH_CHECK ${REGION:+ -r $REGION} ${TAGS:+ -t $TAGS} > ranger_daemon.log &
+# run python ranger daemon, either against zookeeper directly (default) or
+# through an http hub when RANGER_TRANSPORT=http is set
+if [ "$RANGER_TRANSPORT" = "http" ]; then
+  echo "Publishing ranger updates via http hub:[$HUB_HOST:$HUB_PORT] with name=$SERVICE_NAME host=$HOST port=$PORT env=$ENV under namespace=$NAMESPACE and healthCheckUrl=$HEALTH_CHECK"
+  PYTHONPATH=../:. python3.9 serviceprovider/ranger_daemon.py --transport http --hub-host "$HUB_HOST" --hub-port "${HUB_PORT:-80}" ${HUB_SECURE:+ --hub-secure} -s "$SERVICE_NAME" -host "$HOST" -p "$PORT" -e "$ENV" -n "$NAMESPACE" -hcu "$HEALTH_CHECK" ${REGION:+ -r "$REGION"} ${TAGS:+ -t "$TAGS"} > ranger_daemon.log &
+else
+  echo "Publishing ranger updates on cluster:[$RANGER_ZK] with name=$SERVICE_NAME host=$HOST port=$PORT env=$ENV under namespace=$NAMESPACE and healthCheckUrl=$HEALTH_CHECK"
+  PYTHONPATH=../:. python3.9 serviceprovider/ranger_daemon.py -zk "$RANGER_ZK" -s "$SERVICE_NAME" -host "$HOST" -p "$PORT" -e "$ENV" -n "$NAMESPACE" -hcu "$HEALTH_CHECK" ${REGION:+ -r "$REGION"} ${TAGS:+ -t "$TAGS"} > ranger_daemon.log &
+fi
 pid="$!"
 
 # wait forever
