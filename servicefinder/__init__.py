@@ -14,3 +14,12 @@
 
 from servicefinder.service_finder import RangerServiceFinder
 from servicefinder.node_selector import *
+from servicefinder.serviceregistry import ListBasedServiceRegistry, MapBasedServiceRegistry, ServiceRegistry
+from servicefinder.shardselector import (
+    ListShardSelector,
+    MatchingShardSelector,
+    NoopShardSelector,
+    ShardSelector,
+    matches,
+)
+from servicefinder.simple_finder import SimpleServiceFinder, SimpleShardedServiceFinder, SimpleUnshardedServiceFinder
