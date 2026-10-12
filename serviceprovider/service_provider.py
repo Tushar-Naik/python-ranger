@@ -118,7 +118,8 @@ class RangerServiceProvider(object):
     """
 
     def __init__(self, cluster_details: ClusterDetails, service_details: ServiceDetails,
-                 health_check: HealthCheck = None, logger=None, node_data_sink: NodeDataSink = None):
+                 health_check: HealthCheck = None, logger=None, node_data_sink: NodeDataSink = None,
+                 health_monitors=None):
         """
         :param cluster_details: registry details; the zookeeper connection string is only read
         when the default zookeeper sink is used, the update interval always applies
@@ -127,12 +128,17 @@ class RangerServiceProvider(object):
         :param logger: optional logger
         :param node_data_sink: registry backend to publish to. Defaults to zookeeper, built from
         cluster_details.zk_string
+        :param health_monitors: optional list of IsolatedHealthMonitor. The provider is healthy only
+        while health_check (if any) reports healthy AND every enabled, non-stale monitor reports
+        healthy; a monitor that has gone stale (has not produced a result recently) counts as unhealthy,
+        the same as an explicit unhealthy result, since it likely means its thread has died or hung
         """
         self._cluster_details = cluster_details
         self._service_details = service_details
         self.is_running = False
         self._logger = logger if logger is not None else get_default_logger()
         self._health_check = health_check if health_check is not None else _NoHealthCheck(logger)
+        self._health_monitors = list(health_monitors) if health_monitors else []
         if node_data_sink is None:
             node_data_sink = ZkNodeDataSink(zk_string=self._cluster_details.zk_string, logger=self._logger)
         self._ranger_client = _RangerClient(node_data_sink, self._service_details, self._logger)
@@ -149,6 +155,8 @@ class RangerServiceProvider(object):
                 return
             self._logger.info("Stopping all updates to the registry and cleaning up..")
             self._job.stop()
+            for monitor in self._health_monitors:
+                monitor.stop()
             self._ranger_client.stop()
             self.is_running = False
         finally:
@@ -170,7 +178,7 @@ class RangerServiceProvider(object):
         Does healthcheck if necessary
         """
         try:
-            status = HealthcheckStatus.HEALTHY if self._health_check.is_healthy() else HealthcheckStatus.UNHEALTHY
+            status = self._aggregate_health_status()
             if self._ranger_client.update_tick(status) is None:
                 # the sink already logged the cause; re-establish the connection so the
                 # next tick has a chance of succeeding
@@ -181,6 +189,24 @@ class RangerServiceProvider(object):
             self._ranger_client.start()
         except Exception:
             self._logger.exception("Error while updating the registry")
+
+    def _aggregate_health_status(self):
+        """
+        :return: HealthcheckStatus.HEALTHY only while health_check (if configured)
+        reports healthy and every enabled monitor both reports healthy and has a
+        recent result; otherwise HealthcheckStatus.UNHEALTHY
+        """
+        if not self._health_check.is_healthy():
+            return HealthcheckStatus.UNHEALTHY
+        for monitor in self._health_monitors:
+            if monitor.is_disabled():
+                continue
+            if not monitor.has_valid_updated_time():
+                self._logger.warning(f"Monitor:{monitor.name} has gone stale, treating it as unhealthy")
+                return HealthcheckStatus.UNHEALTHY
+            if monitor.get_health_status() != HealthcheckStatus.HEALTHY:
+                return HealthcheckStatus.UNHEALTHY
+        return HealthcheckStatus.HEALTHY
 
     def start(self, block=False):
         """
@@ -198,6 +224,8 @@ class RangerServiceProvider(object):
             self.is_running = True
             self._logger.info(json.dumps(self._cluster_details, default=default_serialize_func))
             self._ranger_client.start()
+            for monitor in self._health_monitors:
+                monitor.start()
             self._job = Job(timedelta(seconds=self._cluster_details.update_interval_in_secs), self._ranger_update_tick)
         finally:
             _release_lock()
