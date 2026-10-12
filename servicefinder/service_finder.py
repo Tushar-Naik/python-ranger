@@ -52,11 +52,12 @@ class _RangerClient(object):
     """
     An internal client class used to implement all the zk talks
     """
-    def __init__(self, zk: KazooClient, path, services, logger):
+    def __init__(self, zk: KazooClient, path, services, logger, node_data_deserializer=None):
         self.zk = zk
         self.path = path
         self.services = services
         self.logger = logger
+        self.node_data_deserializer = node_data_deserializer
 
     def start(self):
         # mirrors the provider: starting an already connected client raises
@@ -97,7 +98,7 @@ class _RangerClient(object):
 
     def _convert_to_service_node(self, node_data_bytes):
         try:
-            return ServiceNode.create(node_data_bytes)
+            return ServiceNode.create(node_data_bytes, node_data_deserializer=self.node_data_deserializer)
         except Exception:
             self.logger.exception("Unable to parse node data into ServiceNode")
             return None
@@ -129,7 +130,8 @@ class RangerServiceFinder(object):
                  selector: Selector = RandomNodeSelector(),
                  criteria_filter: Criteria = None,
                  logger=None,
-                 zombie_check_threshold_time_in_ms: int = 60000):
+                 zombie_check_threshold_time_in_ms: int = 60000,
+                 node_data_deserializer=None):
         """
         :param cluster_details: Zookeeper cluster details
         :param namespace: ranger namespace (name of org)
@@ -139,6 +141,9 @@ class RangerServiceFinder(object):
         :param logger: for logging
         :param zombie_check_threshold_time_in_ms: maximum time, beyond which, node will be considered unhealthy,
         if their lastUpdatedTimestamp has not changed
+        :param node_data_deserializer: optional callable applied to the raw nodeData mapping of every discovered
+        node. Node data is left as a plain mapping when this is not supplied, which keeps the payload generic.
+        Pass ``LegacyNodeData.from_dict`` to get back the pre 2.0 environment/region/tags object.
         """
         self._cluster_details = cluster_details
         self._services = services
@@ -153,7 +158,8 @@ class RangerServiceFinder(object):
                         connection_retry=KazooRetry(max_tries=float('inf'), delay=0.2, max_delay=2)),
             self._namespace,
             self._services,
-            self._logger)
+            self._logger,
+            node_data_deserializer)
         self._job = None
         self._criteria_filter = criteria_filter
         self._service_mapping = {}
