@@ -87,7 +87,18 @@ second, http based transport alongside the existing zookeeper one.
   publish the new `ServiceNode` fields. The Docker entrypoint honours
   `RANGER_TRANSPORT=http` with `HUB_HOST`/`HUB_PORT`/`HUB_SECURE`.
 
-### Changed
+### Breaking
+
+- **`ServiceNode.get_node_data()` returns a plain `dict` by default, not a
+  `NodeData` object.** This is the direct, unavoidable consequence of making
+  `nodeData` generic (see Added, above): the library can no longer assume
+  every payload has `.environment`/`.region`/`.tags` attributes. Code written
+  as `node.get_node_data().environment` will raise `AttributeError`; code
+  written as `node.get_node_data()['environment']` is unaffected. To restore
+  the exact pre-2.0 object, pass `node_data_deserializer=ShardInfo.from_dict`
+  to `RangerServiceFinder(...)` or `ServiceNode.create(...)`.
+
+### Changed (non-breaking)
 
 - **`NodeData` renamed to `ShardInfo`**, matching the name the reference
   implementation's own example servers use for this exact
@@ -96,10 +107,11 @@ second, http based transport alongside the existing zookeeper one.
 - `ServiceNode`'s constructor gained new keyword arguments
   (`routing_weight`, `healthy_since_timestamp`, `port_scheme`) after the
   existing ones; all existing positional and keyword call sites keep working.
-- `ServiceNode.create()`/`from_dict()` accept an optional
-  `node_data_deserializer`; without one, `node_data` is left as a plain dict
-  rather than being coerced into the old fixed shape. Pass
-  `ShardInfo.from_dict` to get the pre-2.0 object back.
+- A failed registry lookup (transient network/ZK error during a background
+  refresh) now makes a finder keep its last known-good node list instead of
+  reporting zero nodes for that cycle. Strictly a reliability improvement,
+  but worth knowing about: a brief network blip no longer makes
+  `get_all_nodes()` momentarily return `[]`/`None`.
 - `--environment` on the daemon no longer restricts values to `stage`/`prod`,
   since the hierarchical selector expects dotted values such as
   `prod.region2.cell5`.
