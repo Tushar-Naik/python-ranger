@@ -123,3 +123,94 @@ class TestHealthySinceTimestamp:
 
         assert third != UNSET_TIMESTAMP
         assert third >= first
+
+
+class TestMultiMonitorAggregation:
+    """
+    RangerServiceProvider's published status should be healthy only while the
+    legacy health_check (if configured) and every enabled, non-stale monitor
+    all agree the service is healthy.
+    """
+
+    def _provider(self, health_check=None, health_monitors=None):
+        from rangermodels.ranger_models import ClusterDetails
+        from serviceprovider.service_provider import RangerServiceProvider
+
+        sink = mock.Mock()
+        sink.update_health.side_effect = lambda service, node: node
+        details = ServiceDetails(host="h", port=8080, namespace="ns", service_name="svc")
+        provider = RangerServiceProvider(ClusterDetails("x:2181"), details, health_check=health_check,
+                                         logger=LOGGER, node_data_sink=sink, health_monitors=health_monitors)
+        return provider, sink
+
+    def _published_status(self, sink):
+        return sink.update_health.call_args[0][1].healthcheck_status
+
+    def _monitor(self, status, disabled=False, stale=False):
+        monitor = mock.Mock()
+        monitor.is_disabled.return_value = disabled
+        monitor.has_valid_updated_time.return_value = not stale
+        monitor.get_health_status.return_value = status
+        monitor.name = "mock-monitor"
+        return monitor
+
+    def test_healthy_when_everything_agrees(self):
+        provider, sink = self._provider(health_monitors=[self._monitor(HealthcheckStatus.HEALTHY)])
+
+        provider._ranger_update_tick()
+
+        assert self._published_status(sink) == HealthcheckStatus.HEALTHY
+
+    def test_unhealthy_when_any_monitor_is_unhealthy(self):
+        provider, sink = self._provider(health_monitors=[
+            self._monitor(HealthcheckStatus.HEALTHY),
+            self._monitor(HealthcheckStatus.UNHEALTHY),
+        ])
+
+        provider._ranger_update_tick()
+
+        assert self._published_status(sink) == HealthcheckStatus.UNHEALTHY
+
+    def test_a_disabled_unhealthy_monitor_is_ignored(self):
+        provider, sink = self._provider(health_monitors=[
+            self._monitor(HealthcheckStatus.UNHEALTHY, disabled=True),
+        ])
+
+        provider._ranger_update_tick()
+
+        assert self._published_status(sink) == HealthcheckStatus.HEALTHY
+
+    def test_a_stale_monitor_is_treated_as_unhealthy_even_if_its_last_result_was_healthy(self):
+        provider, sink = self._provider(health_monitors=[
+            self._monitor(HealthcheckStatus.HEALTHY, stale=True),
+        ])
+
+        provider._ranger_update_tick()
+
+        assert self._published_status(sink) == HealthcheckStatus.UNHEALTHY
+
+    def test_legacy_health_check_still_applies_alongside_monitors(self):
+        failing_check = mock.Mock()
+        failing_check.is_healthy.return_value = False
+        provider, sink = self._provider(health_check=failing_check,
+                                        health_monitors=[self._monitor(HealthcheckStatus.HEALTHY)])
+
+        provider._ranger_update_tick()
+
+        assert self._published_status(sink) == HealthcheckStatus.UNHEALTHY
+
+    def test_no_monitors_behaves_as_before(self):
+        provider, sink = self._provider()
+
+        provider._ranger_update_tick()
+
+        assert self._published_status(sink) == HealthcheckStatus.HEALTHY
+
+    def test_monitors_are_started_and_stopped_with_the_provider(self):
+        monitor = self._monitor(HealthcheckStatus.HEALTHY)
+        provider, _ = self._provider(health_monitors=[monitor])
+
+        provider.start()
+        monitor.start.assert_called_once()
+        provider.stop()
+        monitor.stop.assert_called_once()
