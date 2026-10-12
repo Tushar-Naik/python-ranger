@@ -22,10 +22,10 @@ with open("README.md", "r") as fh:
 
 setup(
     name='python-ranger-tn',
-    version='1.8.4',
-    packages=find_packages(),
+    version='2.0.0',
+    packages=find_packages(exclude=['tests', 'tests.*']),
     license='Apache License 2.0',
-    description='The python equivalent for ranger based service discovery mechanism using zookeeper',
+    description='A python client for ranger based service discovery, over zookeeper or an http hub',
     author='Tushar Naik',
     author_email='tushar.knaik@gmail.com',
     keywords=['ranger', 'zookeeper', 'service discovery', 'periodic task', 'interval', 'periodic job', 'flask style',
@@ -34,10 +34,10 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/Tushar-Naik/python-ranger",
     include_package_data=True,
+    python_requires='>=3.9',
     install_requires=[
-        'requests',
-        'kazoo',
-        'python_daemon'
+        'requests>=2.25',
+        'kazoo>=2.8',
     ],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
@@ -45,6 +45,10 @@ setup(
         'License :: OSI Approved :: Apache Software License',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
         'Programming Language :: Python :: Implementation :: PyPy',
         'Topic :: Utilities',
         'Topic :: System :: Networking',
