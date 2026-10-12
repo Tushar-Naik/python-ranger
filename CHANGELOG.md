@@ -7,7 +7,7 @@ All notable changes to this project are documented here. This project follows
 
 This release brings the client up to parity with the current
 [appform-io/ranger](https://github.com/appform-io/ranger) reference
-implementation, fixes several bugs present since the 1.x line, and adds a
+implementation, corrects several issues present since the 1.x line, and adds a
 second, http based transport alongside the existing zookeeper one.
 
 ### Fixed
