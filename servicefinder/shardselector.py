@@ -114,3 +114,57 @@ class MatchingShardSelector(ShardSelector):
             if nodes and criteria(nodes[0].get_node_data()):
                 matched.extend(nodes)
         return matched
+
+
+def _environment_chain(environment, separator):
+    """
+    Yields ``environment``, then progressively shorter prefixes obtained by
+    dropping everything after the last remaining separator, most specific
+    first. For ``"prod.region2.cell5"`` with ``separator="."`` this yields
+    ``"prod.region2.cell5"``, ``"prod.region2"``, ``"prod"``.
+    """
+    remaining = environment
+    while remaining:
+        yield remaining
+        index = remaining.rfind(separator)
+        remaining = remaining[:index] if index >= 0 else ""
+
+
+class HierarchicalEnvironmentAwareShardSelector(ShardSelector):
+    """
+    Matches nodes by :class:`~rangermodels.ranger_models.ShardInfo` environment,
+    preferring the most specific match and progressively falling back to
+    broader environments.
+
+    A service registered under ``prod.region2.cell5`` is found by a caller
+    whose own environment is any of ``prod``, ``prod.region2`` or
+    ``prod.region2.cell5``: each is tried from most to least specific, and the
+    first one with any matching node wins, rather than merging nodes across
+    environments.
+    """
+
+    def __init__(self, environment: str, separator: str = '.'):
+        """
+        :param environment: the caller's own environment, e.g. ``"prod.region2.cell5"``
+        :param separator: separator between environment segments
+        """
+        self.environment = environment
+        self.separator = separator
+
+    def nodes(self, criteria, registry: MapBasedServiceRegistry):
+        for candidate_environment in _environment_chain(self.environment, self.separator):
+            eligible = []
+            for node_data, bucketed_nodes in registry.nodes().items():
+                if not bucketed_nodes:
+                    continue
+                shard_info = bucketed_nodes[0].get_node_data()
+                environment = getattr(shard_info, 'environment', None)
+                if environment != candidate_environment:
+                    continue
+                if criteria is None:
+                    eligible.extend(bucketed_nodes)
+                else:
+                    eligible.extend(node for node in bucketed_nodes if matches(criteria, node))
+            if eligible:
+                return eligible
+        return []

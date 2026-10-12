@@ -16,6 +16,7 @@ from servicefinder.service_finder import RangerServiceFinder
 from servicefinder.node_selector import *
 from servicefinder.serviceregistry import ListBasedServiceRegistry, MapBasedServiceRegistry, ServiceRegistry
 from servicefinder.shardselector import (
+    HierarchicalEnvironmentAwareShardSelector,
     ListShardSelector,
     MatchingShardSelector,
     NoopShardSelector,
