@@ -40,6 +40,13 @@ class Monitor(ABC):
         :return: the current status, typically a HealthcheckStatus
         """
 
+    def is_disabled(self):
+        """
+        :return: True when this monitor should be ignored while aggregating health.
+        Enabled unless a subclass says otherwise.
+        """
+        return False
+
 
 class IsolatedHealthMonitor(Monitor):
     """

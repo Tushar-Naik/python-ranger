@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from healthservice.health_service import HealthService, ServiceHealthAggregator
 from healthservice.monitor import IsolatedHealthMonitor, Monitor
 from healthservice.rolling_window import RollingWindowHealthQueue
 from healthservice.time_entity import TimeEntity
 
 __all__ = [
+    'HealthService',
     'IsolatedHealthMonitor',
     'Monitor',
     'RollingWindowHealthQueue',
+    'ServiceHealthAggregator',
     'TimeEntity',
 ]

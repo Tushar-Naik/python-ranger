@@ -24,3 +24,14 @@ from servicefinder.shardselector import (
     matches,
 )
 from servicefinder.simple_finder import SimpleServiceFinder, SimpleShardedServiceFinder, SimpleUnshardedServiceFinder
+from servicefinder.weighted_selector import (
+    AbstractWeightedSelector,
+    ConditionalNodeSelector,
+    IterativeWeightedSelector,
+    RoutingWeightEnricher,
+    TimeBasedWeightEnricher,
+    TwoNodeComparisonWeightedSelector,
+    WeightedNodeSelectorConfig,
+    WeightedRandomServiceNodeSelector,
+    WeightEnricher,
+)
