@@ -20,9 +20,10 @@ section if you're upgrading.
 4. [Service Provider](#service-provider)
 5. [Shard selection](#shard-selection)
 6. [Dynamic multi-service discovery (hub)](#dynamic-multi-service-discovery-hub)
-7. [Health monitors](#health-monitors)
-8. [Ranger Daemon](#ranger-daemon)
-9. [Under the hood](#under-the-hood)
+7. [Weighted, warmup-aware selection](#weighted-warmup-aware-selection)
+8. [Health monitors](#health-monitors)
+9. [Ranger Daemon](#ranger-daemon)
+10. [Under the hood](#under-the-hood)
 
 ## Installation
 
@@ -220,6 +221,30 @@ hub.stop()
 
 Use `sharded_finder_factory` instead for sharded services.
 
+## Weighted, warmup-aware selection
+
+`RandomNodeSelector` and `RoundRobinNodeSelector` treat every node alike. Right
+after a restart a node is usually cold, and an equal share of traffic the
+moment it turns healthy can overwhelm it. `WeightedRandomServiceNodeSelector`
+uses the `routingWeight` and `healthySinceTimeStamp` every node publishes to
+ramp traffic in:
+
+```python
+from servicefinder import RangerServiceFinder, WeightedNodeSelectorConfig, WeightedRandomServiceNodeSelector
+
+selector = WeightedRandomServiceNodeSelector(WeightedNodeSelectorConfig(
+    min_node_age_ms=60000,         # healthy for longer than this counts as warmed up
+    weight_boost_multiplier=2.0,   # warmed up nodes weigh this much more (1.0 - 5.0)
+    weighted_selection_threshold=10))  # exact weighted pick up to this many nodes, cheaper pick above
+
+ranger = RangerServiceFinder(cluster_details, "org", ["serviceA"], selector=selector)
+```
+
+A node's weight is its published `routingWeight` multiplied by the warmup
+boost, so a service owner can also set `routingWeight` to steer traffic
+explicitly; a weight of `0` drains a node entirely. Custom factors can be
+added by implementing `WeightEnricher`.
+
 ## Health monitors
 
 A provider can aggregate several independent health checks instead of a
@@ -244,6 +269,21 @@ exactly while a file exists (remove it to drain traffic during a controlled
 shutdown). `CountMonitor` (and the `DiskSpaceMonitor` example built on it) is
 healthy while some countable value stays within a threshold. Subclass
 `IsolatedHealthMonitor` directly for anything else.
+
+Monitors can also be run **inline** (no thread of their own, evaluated on
+every update tick), which suits cheap on-demand checks:
+
+```python
+from healthservice.monitors import file_existence_check_monitor
+
+ranger = RangerServiceProvider(cluster_details, service_details,
+                               health_monitors=monitors,
+                               inline_health_monitors=[file_existence_check_monitor('/var/run/ok')])
+```
+
+The aggregation behind this is available on its own as
+`healthservice.ServiceHealthAggregator` (`add_isolated_monitor`,
+`add_inline_monitor`, `start`, `stop`, `get_service_health`).
 
 ## Ranger Daemon
 

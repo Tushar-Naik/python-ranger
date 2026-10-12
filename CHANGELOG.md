@@ -81,6 +81,21 @@ second, http based transport alongside the existing zookeeper one.
   (healthy iff a file exists, for controlled drains), and the abstract
   `CountMonitor` (healthy iff a count breaches a threshold), plus
   `DiskSpaceMonitor` as a worked `CountMonitor` example.
+- **Warmup-aware weighted node selection** (`servicefinder.weighted_selector`):
+  `WeightedRandomServiceNodeSelector` turns the published `routingWeight` and
+  `healthySinceTimeStamp` into a selection probability, so a node that has only
+  just turned healthy receives proportionally less traffic than established
+  ones until it has aged in. Exact weighted selection for small node lists,
+  "power of two choices" above a threshold. Tunables and their valid ranges
+  (`WeightedNodeSelectorConfig`) match the reference implementation. Drops in
+  anywhere a `RandomNodeSelector` can be used.
+- **`ServiceHealthAggregator`** (`healthservice.health_service`): the health
+  aggregation previously inlined in `RangerServiceProvider`, as a standalone
+  component. Adds **inline monitors** (no thread of their own, evaluated on
+  every health request) next to the existing thread-backed ones, plus
+  `file_existence_check_monitor()` / `default_healthy_monitor()` helpers.
+  `RangerServiceProvider` composes it and gains `inline_health_monitors`;
+  existing `health_monitors` behaviour is unchanged.
 - **`ranger_daemon.py --transport {zk,http}`**, with `--hub-host`/
   `--hub-port`/`--hub-secure` for the http case, `--node-data-json` for an
   arbitrary nodeData payload, and `--port-scheme`/`--routing-weight` to
