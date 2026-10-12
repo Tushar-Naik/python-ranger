@@ -22,10 +22,12 @@ from rangermodels.ranger_models import (
     ClusterDetails,
     HealthcheckStatus,
     NodeData,
+    Service,
     ServiceNode,
 )
 from servicefinder.criteria import Criteria
 from servicefinder.service_finder import RangerServiceFinder, _RangerClient
+from transport.zk import ZkNodeDataSource
 
 NAMESPACE = "testns"
 SERVICE = "testsvc"
@@ -117,13 +119,15 @@ class TestCriteriaFilterRespectsHealth:
 class TestFinderClientStart:
     """
     Regression tests: the finder started its kazoo client unconditionally, unlike the
-    provider, so a caller supplying an already connected client hit an exception.
+    provider, so a caller supplying an already connected client hit an exception. The
+    lifecycle now lives in the source, so exercise it through one.
     """
 
     def _client(self, connected):
         zk = mock.Mock()
         zk.connected = connected
-        return _RangerClient(zk, NAMESPACE, [SERVICE], mock.Mock()), zk
+        source = ZkNodeDataSource(client=zk, namespace=NAMESPACE)
+        return _RangerClient(source, NAMESPACE, [SERVICE], mock.Mock()), zk
 
     def test_disconnected_client_is_started(self):
         client, zk = self._client(connected=False)
@@ -135,10 +139,47 @@ class TestFinderClientStart:
         client.start()
         zk.start.assert_not_called()
 
-    def test_stop_always_stops(self):
+    def test_stop_leaves_a_caller_owned_client_alone(self):
         client, zk = self._client(connected=True)
         client.stop()
-        zk.stop.assert_called_once_with()
+        zk.stop.assert_not_called()
+
+
+class TestFinderRefresh:
+    """
+    A failed lookup must not be mistaken for a service that has no nodes.
+    """
+
+    def _client(self, source):
+        return _RangerClient(source, NAMESPACE, [SERVICE], mock.Mock())
+
+    def test_nodes_are_taken_from_the_source(self):
+        source = mock.Mock()
+        source.nodes.return_value = [_node("h1")]
+
+        mapping = self._client(source).get_nodes()
+
+        assert [node.get_host() for node in mapping[SERVICE]] == ["h1"]
+        assert source.nodes.call_args[0][0] == Service(NAMESPACE, SERVICE)
+
+    def test_a_failed_lookup_keeps_the_previous_nodes(self):
+        source = mock.Mock()
+        source.nodes.return_value = None
+        previous = {SERVICE: [_node("h1")]}
+
+        assert self._client(source).get_nodes(previous)[SERVICE] == previous[SERVICE]
+
+    def test_an_empty_service_clears_the_previous_nodes(self):
+        source = mock.Mock()
+        source.nodes.return_value = []
+
+        assert self._client(source).get_nodes({SERVICE: [_node("h1")]})[SERVICE] == []
+
+    def test_a_failed_lookup_without_a_previous_view_yields_no_nodes(self):
+        source = mock.Mock()
+        source.nodes.return_value = None
+
+        assert self._client(source).get_nodes()[SERVICE] == []
 
 
 class TestFinderGuards:

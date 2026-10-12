@@ -18,20 +18,22 @@ from unittest import mock
 
 from rangermodels.ranger_models import (
     UNSET_TIMESTAMP,
-    ClusterDetails,
     HealthcheckStatus,
     PortSchemes,
     ServiceDetails,
 )
 from serviceprovider.service_provider import _RangerClient
+from transport.zk import ZkNodeDataSink
 
 LOGGER = logging.getLogger("test")
 
 
 def _client(service_details, exists=False):
     zk = mock.Mock()
+    zk.connected = True
     zk.exists.return_value = exists
-    return zk, _RangerClient(zk, ClusterDetails("localhost:2181"), service_details, LOGGER)
+    sink = ZkNodeDataSink(client=zk, logger=LOGGER)
+    return zk, _RangerClient(sink, service_details, LOGGER)
 
 
 def _published(zk):
