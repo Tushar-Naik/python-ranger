@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from healthservice.monitors.count_monitor import CheckSign, CountMonitor, DiskSpaceMonitor
+from healthservice.monitors.inline import default_healthy_monitor, file_existence_check_monitor
 from healthservice.monitors.ping_check import PingCheckMonitor
 from healthservice.monitors.rotation_status import RotationStatusMonitor
 
@@ -20,6 +21,8 @@ __all__ = [
     'CheckSign',
     'CountMonitor',
     'DiskSpaceMonitor',
+    'default_healthy_monitor',
+    'file_existence_check_monitor',
     'PingCheckMonitor',
     'RotationStatusMonitor',
 ]
