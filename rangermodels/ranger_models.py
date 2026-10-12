@@ -101,13 +101,20 @@ def serialize_node_data(node_data):
         f"Pass a dict, an object exposing to_dict(), or a custom serializer.")
 
 
-class LegacyNodeData(object):
+class ShardInfo(object):
     """
-    The fixed ``{environment, region, tags}`` payload used before node data
-    became generic.
+    The conventional ``{environment, region, tags}`` node data payload.
 
-    It is retained purely as a convenience for existing deployments; new code
-    should pass any json serializable object as node data instead.
+    This is not a required shape -- ``nodeData`` is generic, see
+    :func:`serialize_node_data` -- but it is the shape the reference
+    implementation's own example servers publish: ``environment`` for
+    prod/stage style deployment stages, ``region`` for the datacenter/cell a
+    node runs in, and ``tags`` for anything else you want to filter or A/B on.
+    It round-trips byte for byte with what this client published before
+    nodeData became generic.
+
+    :class:`~servicefinder.shardselector.HierarchicalEnvironmentAwareShardSelector`
+    is built specifically around this shape's ``environment`` field.
     """
 
     def __init__(self, environment=None, region=None, tags=None):
@@ -125,7 +132,7 @@ class LegacyNodeData(object):
         Deserializer suitable for passing to :meth:`ServiceNode.create`.
 
         :param node_data_json: raw ``nodeData`` mapping
-        :return: LegacyNodeData
+        :return: ShardInfo
         """
         if node_data_json is None:
             return None
@@ -138,17 +145,27 @@ class LegacyNodeData(object):
             return {}
         return {"environment": self.environment, "region": self.region, "tags": self.tags}
 
+    def _tags_key(self):
+        return tuple(self.tags) if self.tags is not None else None
+
     def __eq__(self, other):
-        if not isinstance(other, LegacyNodeData):
+        if not isinstance(other, ShardInfo):
             return NotImplemented
-        return (self.environment, self.region, self.tags) == (other.environment, other.region, other.tags)
+        return (self.environment, self.region, self._tags_key()) == (other.environment, other.region,
+                                                                     other._tags_key())
+
+    def __hash__(self):
+        return hash((self.environment, self.region, self._tags_key()))
 
     def __repr__(self):
-        return f"LegacyNodeData(environment={self.environment!r}, region={self.region!r}, tags={self.tags!r})"
+        return f"ShardInfo(environment={self.environment!r}, region={self.region!r}, tags={self.tags!r})"
 
 
-#: Backwards compatible alias. ``NodeData`` used to be the only node data shape.
-NodeData = LegacyNodeData
+#: Backwards compatible aliases. Both names used to refer to this fixed shape
+#: before node data became generic; ``ShardInfo`` is now the canonical name,
+#: matching the reference implementation's own example node data class.
+LegacyNodeData = ShardInfo
+NodeData = ShardInfo
 
 
 class Service(object):
