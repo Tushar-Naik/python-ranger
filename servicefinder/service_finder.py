@@ -59,7 +59,9 @@ class _RangerClient(object):
         self.logger = logger
 
     def start(self):
-        self.zk.start()
+        # mirrors the provider: starting an already connected client raises
+        if not self.zk.connected:
+            self.zk.start()
 
     def stop(self):
         self.zk.stop()
@@ -238,5 +240,7 @@ class RangerServiceFinder(object):
             return None
         healthy_nodes = list(filter(lambda x: self._is_service_node_healthy(x), nodes))
         if self._criteria_filter is not None:
-            healthy_nodes = list(filter(lambda x: self._criteria_filter.filter(x), nodes))
+            # the criteria filter narrows down the *healthy* nodes; it must never widen the
+            # selection back out to the unfiltered node list
+            healthy_nodes = list(filter(lambda x: self._criteria_filter.filter(x), healthy_nodes))
         return healthy_nodes

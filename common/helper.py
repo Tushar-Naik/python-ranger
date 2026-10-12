@@ -31,12 +31,22 @@ def default_serialize_func(o):
 
 
 def get_default_logger():
+    """
+    :return: a logger named ``python-ranger`` writing to stdout.
+
+    Idempotent: every caller without their own logger (ServiceNode sources/sinks,
+    finders, providers...) ends up sharing this single named logger, so a handler
+    is only ever attached once. Attaching one unconditionally on every call would
+    pile up a new handler per instance, causing every log line to be printed once
+    per instance ever constructed.
+    """
     logger = logging.getLogger('python-ranger')
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(logging.INFO)
-    formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
+    if not logger.handlers:
+        ch = logging.StreamHandler(sys.stdout)
+        ch.setLevel(logging.INFO)
+        formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
     logger.setLevel(logging.INFO)
     return logger
 
