@@ -17,6 +17,29 @@ import threading
 from servicefinder.node_selector import RandomNodeSelector, RoundRobinNodeSelector
 
 
+class _LockCheckedRoundRobinSelector(RoundRobinNodeSelector):
+    """
+    round robin selector that fails loudly when the cursor is read or written
+    without holding the selector's lock.
+    """
+
+    def __init__(self):
+        self._robin = 0
+        super().__init__()
+
+    @property
+    def robin(self):
+        assert self._lock.locked(), "round robin cursor read without holding the lock"
+        return self._robin
+
+    @robin.setter
+    def robin(self, value):
+        # __init__ assigns the cursor before the lock exists
+        if hasattr(self, "_lock"):
+            assert self._lock.locked(), "round robin cursor written without holding the lock"
+        self._robin = value
+
+
 class TestRoundRobinNodeSelector:
     def test_first_selection_is_the_first_node(self):
         """
@@ -60,7 +83,23 @@ class TestRoundRobinNodeSelector:
 
         assert picked == [nodes[(start + i) % len(nodes)] for i in range(6)]
 
+    def test_cursor_is_only_accessed_while_holding_the_lock(self):
+        """
+        Deterministic guard for the lock: unlike the distribution check below, this
+        fails if the cursor update is ever moved out of the locked section, no matter
+        how the threads happen to be scheduled.
+        """
+        selector = _LockCheckedRoundRobinSelector()
+        nodes = ["a", "b", "c"]
+
+        assert [selector.select(nodes) for _ in range(6)] == ["a", "b", "c", "a", "b", "c"]
+
     def test_concurrent_selection_distributes_evenly(self):
+        """
+        Supplementary aggregate check only. It passes even without a lock when the
+        threads happen to run one after another, so lock protection itself is
+        asserted by ``test_cursor_is_only_accessed_while_holding_the_lock``.
+        """
         selector = RoundRobinNodeSelector()
         nodes = ["a", "b", "c", "d"]
         counts = {node: 0 for node in nodes}
