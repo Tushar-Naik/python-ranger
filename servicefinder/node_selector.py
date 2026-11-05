@@ -18,11 +18,6 @@ from abc import abstractmethod
 
 from common.helper import is_empty
 
-# the round robin cursor is kept monotonic (rather than being reduced against the
-# current node count) so that changes in the node list do not reset the rotation.
-# it is wrapped at this bound purely to keep the counter from growing without end.
-_ROUND_ROBIN_COUNTER_BOUND = 1 << 31
-
 
 class Selector(object):
     """
@@ -62,7 +57,11 @@ class RoundRobinNodeSelector(Selector):
             return None
         with self._lock:
             # read the current position first, then advance; incrementing before
-            # indexing would make the very first call skip index 0
+            # indexing would make the very first call skip index 0.
+            # the cursor is deliberately unbounded and only reduced against the
+            # current node count when indexing: python ints do not overflow, and
+            # wrapping it at a fixed bound (e.g. 2**31) would break the rotation for
+            # any list size that does not divide that bound.
             index = self.robin % len(node_list)
-            self.robin = (self.robin + 1) % _ROUND_ROBIN_COUNTER_BOUND
+            self.robin += 1
         return node_list[index]

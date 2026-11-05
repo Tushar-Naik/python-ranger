@@ -45,6 +45,21 @@ class TestRoundRobinNodeSelector:
         assert selector.select(["a", "b"]) == "b"
         assert selector.select(["a", "b", "c"]) == "c"
 
+    def test_rotation_continues_in_order_past_the_32_bit_boundary(self):
+        """
+        Regression test: the cursor used to be wrapped at 2**31, which is not a
+        multiple of most list sizes, so rotation skipped or repeated a node there.
+        Python ints do not overflow, so the cursor is left unbounded.
+        """
+        selector = RoundRobinNodeSelector()
+        nodes = ["a", "b", "c"]
+        start = (1 << 31) - 2
+        selector.robin = start
+
+        picked = [selector.select(nodes) for _ in range(6)]
+
+        assert picked == [nodes[(start + i) % len(nodes)] for i in range(6)]
+
     def test_concurrent_selection_distributes_evenly(self):
         selector = RoundRobinNodeSelector()
         nodes = ["a", "b", "c", "d"]
