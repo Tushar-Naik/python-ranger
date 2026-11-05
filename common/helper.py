@@ -14,7 +14,10 @@
 
 import logging
 import sys
+import threading
 import time
+
+_LOGGER_LOCK = threading.Lock()
 
 
 def current_milli_time():
@@ -39,15 +42,20 @@ def get_default_logger():
     is only ever attached once. Attaching one unconditionally on every call would
     pile up a new handler per instance, causing every log line to be printed once
     per instance ever constructed.
+
+    The "has a handler?" check and the ``addHandler`` call are guarded by one lock.
+    ``Logger.addHandler`` only synchronizes the add itself, so without it threads
+    racing on first use could each see an empty handler list and each attach one.
     """
     logger = logging.getLogger('python-ranger')
-    if not logger.handlers:
-        ch = logging.StreamHandler(sys.stdout)
-        ch.setLevel(logging.INFO)
-        formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
-    logger.setLevel(logging.INFO)
+    with _LOGGER_LOCK:
+        if not logger.handlers:
+            ch = logging.StreamHandler(sys.stdout)
+            ch.setLevel(logging.INFO)
+            formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
+            ch.setFormatter(formatter)
+            logger.addHandler(ch)
+        logger.setLevel(logging.INFO)
     return logger
 
 
