@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import random
+import threading
 from abc import abstractmethod
 
 from common.helper import is_empty
@@ -46,6 +47,7 @@ class RoundRobinNodeSelector(Selector):
     def __init__(self):
         super().__init__()
         self.robin = 0
+        self._lock = threading.Lock()
 
     def select(self, node_list):
         """
@@ -53,5 +55,13 @@ class RoundRobinNodeSelector(Selector):
         """
         if is_empty(node_list):
             return None
-        self.robin = (self.robin + 1) % len(node_list)
-        return node_list[self.robin]
+        with self._lock:
+            # read the current position first, then advance; incrementing before
+            # indexing would make the very first call skip index 0.
+            # the cursor is deliberately unbounded and only reduced against the
+            # current node count when indexing: python ints do not overflow, and
+            # wrapping it at a fixed bound (e.g. 2**31) would break the rotation for
+            # any list size that does not divide that bound.
+            index = self.robin % len(node_list)
+            self.robin += 1
+        return node_list[index]

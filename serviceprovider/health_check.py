@@ -38,6 +38,10 @@ class HealthCheck(object):
         self.acceptable_errors = acceptable_errors if acceptable_errors is not None else []
 
     def is_healthy(self):
+        """
+        :return: True if the configured endpoint reports the service as healthy, False otherwise.
+        Every failure path, including transport errors and an unusable scheme, reports False.
+        """
         try:
             if UrlScheme.GET == self.scheme:
                 resp = requests.get(url=self.url, headers=self.headers, timeout=self.timeout)
@@ -48,11 +52,14 @@ class HealthCheck(object):
                 self.logger.info(f"Checking health, URL returned:{resp.status_code}")
                 return self._check_status(resp)
             else:
-                self.logger.info(f"Invalid scheme: {self.scheme}")
+                self.logger.error(f"Invalid scheme: {self.scheme}")
+                return False
         except requests.exceptions.ConnectionError:
             self.logger.warning(f"Unable to connect to healthcheck url {self.url}")
-        except requests.exceptions.ReadTimeout:
-            self.logger.warning(f"Unable to connect to healthcheck url {self.url}")
+            return False
+        except requests.exceptions.Timeout:
+            self.logger.warning(f"Timed out talking to healthcheck url {self.url}")
+            return False
         except Exception:
             self.logger.exception("Error while performing healthcheck")
             return False
