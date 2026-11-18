@@ -29,6 +29,8 @@ The responses are wrapped in a ``data`` envelope. Implementations tolerate a bar
 list/object as well, so a minimal hub implementation is still usable.
 """
 
+from urllib.parse import quote
+
 import requests
 
 from common.helper import get_default_logger
@@ -80,7 +82,11 @@ class HttpClientConfig:
         return 'https' if self.secure else 'http'
 
     def base_url(self):
-        return '{scheme}://{host}:{port}'.format(scheme=self.scheme(), host=self.host, port=self.port)
+        host = self.host
+        if ':' in host and not host.startswith('['):
+            # an IPv6 literal has to be bracketed, otherwise its colons clash with the port separator
+            host = '[{host}]'.format(host=host)
+        return '{scheme}://{host}:{port}'.format(scheme=self.scheme(), host=host, port=self.port)
 
     def timeout(self):
         """
@@ -101,6 +107,16 @@ class HttpClientConfig:
 
     def __repr__(self):
         return 'HttpClientConfig({})'.format(self.to_dict())
+
+
+def _service_path(base, service: Service):
+    """
+    :return: ``{base}/{namespace}/{serviceName}`` with each segment percent-encoded, so that
+    reserved characters (``/``, ``?``, ``#`` ...) in a name cannot alter the request path
+    """
+    return '{base}/{namespace}/{service_name}'.format(base=base,
+                                                      namespace=quote(str(service.namespace), safe=''),
+                                                      service_name=quote(str(service.service_name), safe=''))
 
 
 def _unwrap(payload):
@@ -196,9 +212,7 @@ class HttpNodeDataSource(_HttpConnector, NodeDataSource):
         self._node_data_deserializer = node_data_deserializer
 
     def nodes(self, service: Service):
-        path = '{base}/{namespace}/{service_name}'.format(base=NODES_PATH,
-                                                          namespace=service.namespace,
-                                                          service_name=service.service_name)
+        path = _service_path(NODES_PATH, service)
         payload = self._request('GET', path)
         if payload is None:
             return None
@@ -256,9 +270,7 @@ class HttpNodeDataSink(_HttpConnector, NodeDataSink):
                           .format(service=service.name()))
 
     def _publish(self, service: Service, node: ServiceNode):
-        path = '{base}/{namespace}/{service_name}'.format(base=ADD_NODE_PATH,
-                                                          namespace=service.namespace,
-                                                          service_name=service.service_name)
+        path = _service_path(ADD_NODE_PATH, service)
         body = node.to_dict(node_data_serializer=self._node_data_serializer)
         payload = self._request('POST', path, json_body=body)
         if payload is None:

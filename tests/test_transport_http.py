@@ -131,6 +131,15 @@ class TestHttpClientConfig:
     def test_base_url_switches_to_https_when_secure(self):
         assert HttpClientConfig(host='hub', port=443, secure=True).base_url() == 'https://hub:443'
 
+    @pytest.mark.parametrize('host, expected', [
+        ('::1', 'http://[::1]:8080'),
+        ('fe80::1:2', 'http://[fe80::1:2]:8080'),
+        ('[::1]', 'http://[::1]:8080'),
+        ('10.0.0.1', 'http://10.0.0.1:8080'),
+    ])
+    def test_base_url_brackets_ipv6_literals(self, host, expected):
+        assert HttpClientConfig(host=host, port=8080).base_url() == expected
+
     def test_timeout_is_a_connect_read_pair_in_seconds(self):
         config = HttpClientConfig(host='hub', connection_timeout_ms=1500, operation_timeout_ms=4000)
         assert config.timeout() == (1.5, 4.0)
@@ -238,6 +247,31 @@ class TestHttpNodeDataSource:
 
         assert source.nodes(SERVICE) is None
         assert source.services() == set()
+
+
+RESERVED_SERVICE = Service('team/ns', 'svc?x=1#frag')
+RESERVED_SERVICE_PATH = 'team%2Fns/svc%3Fx%3D1%23frag'
+
+
+class TestReservedCharactersInNames:
+
+    def test_nodes_lookup_percent_encodes_each_segment(self, hub):
+        hub.route('GET', '/ranger/nodes/v1/' + RESERVED_SERVICE_PATH, {'data': [_node_json('host-1')]})
+        source = HttpNodeDataSource(_config(hub), logger=LOGGER)
+
+        nodes = source.nodes(RESERVED_SERVICE)
+
+        assert [node.get_host() for node in nodes] == ['host-1']
+        assert hub.requests[-1]['path'] == '/ranger/nodes/v1/' + RESERVED_SERVICE_PATH
+        assert hub.requests[-1]['query'] == {}
+
+    def test_publish_percent_encodes_each_segment(self, hub):
+        hub.route('POST', '/ranger/nodes/v1/add/' + RESERVED_SERVICE_PATH, {'data': _node_json('host-1')})
+        sink = HttpNodeDataSink(_config(hub), logger=LOGGER)
+
+        assert sink.register(RESERVED_SERVICE, ServiceNode('host-1', 8080)) is not None
+        assert hub.requests[-1]['path'] == '/ranger/nodes/v1/add/' + RESERVED_SERVICE_PATH
+        assert hub.requests[-1]['query'] == {}
 
 
 class TestHttpNodeDataSink:
