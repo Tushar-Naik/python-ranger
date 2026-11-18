@@ -48,6 +48,11 @@ def node_path(service: Service, node: ServiceNode):
     return f"{service_root_path(service)}/{node.representation()}"
 
 
+# marker returned by ZkNodeDataSource._read_node when the read failed for a transport reason,
+# as opposed to the node having disappeared or holding an unparseable payload
+_READ_FAILED = object()
+
+
 def _reader_retry():
     # proper infinite retries to ensure we handle network flakiness
     return KazooRetry(max_tries=float('inf'), delay=0.2, max_delay=2)
@@ -124,6 +129,10 @@ class ZkNodeDataSource(_ZkConnector, NodeDataSource):
         nodes = []
         for child in children:
             node = self._read_node(f"{path}/{child}")
+            if node is _READ_FAILED:
+                # a transport failure means this listing is incomplete; report the lookup as
+                # failed so callers keep their previous view instead of dropping live nodes
+                return None
             if node is not None:
                 nodes.append(node)
         return nodes
@@ -144,6 +153,10 @@ class ZkNodeDataSource(_ZkConnector, NodeDataSource):
         return {Service(self._namespace, child) for child in children}
 
     def _read_node(self, path):
+        """
+        :return: the parsed ServiceNode, None when the node should simply be skipped (it went
+        away or its payload is malformed), or _READ_FAILED when the read itself failed
+        """
         try:
             payload, _ = self.zk.get(path)
         except NoNodeError:
@@ -151,7 +164,7 @@ class ZkNodeDataSource(_ZkConnector, NodeDataSource):
             return None
         except Exception:
             self._logger.exception(f"Error while reading node at path:{path}")
-            return None
+            return _READ_FAILED
         try:
             return ServiceNode.create(payload, node_data_deserializer=self._node_data_deserializer)
         except Exception:

@@ -20,11 +20,13 @@ import pytest
 
 from rangermodels.ranger_models import (
     UNSET_TIMESTAMP,
+    ClusterDetails,
     HealthcheckStatus,
     PortSchemes,
     ServiceDetails,
 )
-from serviceprovider.service_provider import _RangerClient
+from serviceprovider.service_provider import RangerServiceProvider, _RangerClient
+from transport.base import NodeDataSink
 from transport.zk import ZkNodeDataSink
 
 LOGGER = logging.getLogger("test")
@@ -140,3 +142,140 @@ class TestHealthySinceTimestamp:
         assert after_unhealthy == UNSET_TIMESTAMP
         # the new streak starts at the third tick, not the first one
         assert third == 3000
+
+
+class _StrictSink(NodeDataSink):
+    """
+    In-memory sink that, like a real registry, refuses heartbeats for nodes it does not know.
+    """
+
+    def __init__(self):
+        self.nodes = {}
+        self.calls = []
+        self.started = 0
+        self.stopped = 0
+
+    def start(self):
+        self.started += 1
+
+    def stop(self):
+        self.stopped += 1
+
+    def is_active(self):
+        return True
+
+    def register(self, service, node):
+        self.calls.append("register")
+        self.nodes[(service, node.representation())] = node
+        return node
+
+    def update_health(self, service, node):
+        self.calls.append("update_health")
+        key = (service, node.representation())
+        if key not in self.nodes:
+            return None
+        self.nodes[key] = node
+        return node
+
+    def deregister(self, service, node):
+        self.calls.append("deregister")
+        self.nodes.pop((service, node.representation()), None)
+
+
+DETAILS = ServiceDetails(host="h", port=8080, namespace="ns", service_name="svc")
+
+
+class TestRegistration:
+    def test_first_tick_registers_then_updates(self):
+        sink = _StrictSink()
+        client = _RangerClient(sink, DETAILS, LOGGER)
+        client.start()
+
+        assert client.update_tick(HealthcheckStatus.HEALTHY) is not None
+        assert client.update_tick(HealthcheckStatus.HEALTHY) is not None
+
+        assert sink.calls == ["register", "update_health"]
+        assert len(sink.nodes) == 1
+
+    def test_reregisters_after_the_registration_is_lost(self):
+        sink = _StrictSink()
+        client = _RangerClient(sink, DETAILS, LOGGER)
+        client.start()
+        client.update_tick(HealthcheckStatus.HEALTHY)
+
+        # the registry dropped the node (eg: session expiry / hub eviction)
+        sink.nodes.clear()
+        assert client.update_tick(HealthcheckStatus.HEALTHY) is None
+        assert client.update_tick(HealthcheckStatus.HEALTHY) is not None
+
+        assert sink.calls == ["register", "update_health", "register"]
+        assert len(sink.nodes) == 1
+
+    def test_reregisters_after_a_restart(self):
+        sink = _StrictSink()
+        client = _RangerClient(sink, DETAILS, LOGGER)
+        client.start()
+        client.update_tick(HealthcheckStatus.HEALTHY)
+
+        client.start()
+        client.update_tick(HealthcheckStatus.HEALTHY)
+
+        assert sink.calls == ["register", "register"]
+
+    def test_reregisters_after_a_publish_error(self):
+        sink = _StrictSink()
+        client = _RangerClient(sink, DETAILS, LOGGER)
+        client.update_tick(HealthcheckStatus.HEALTHY)
+
+        with mock.patch.object(sink, "update_health", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError):
+                client.update_tick(HealthcheckStatus.HEALTHY)
+        client.update_tick(HealthcheckStatus.HEALTHY)
+
+        assert sink.calls == ["register", "register"]
+
+
+class TestDeregistrationOnStop:
+    def test_stop_deregisters_the_published_node_before_stopping_the_sink(self):
+        sink = mock.Mock(wraps=_StrictSink())
+        client = _RangerClient(sink, DETAILS, LOGGER)
+        client.update_tick(HealthcheckStatus.HEALTHY)
+
+        client.stop()
+
+        assert [c[0] for c in sink.method_calls] == ["register", "deregister", "stop"]
+
+    def test_stop_without_a_published_node_skips_deregister(self):
+        sink = _StrictSink()
+        _RangerClient(sink, DETAILS, LOGGER).stop()
+        assert sink.calls == []
+        assert sink.stopped == 1
+
+    def test_stop_still_stops_the_sink_when_deregister_fails(self):
+        sink = _StrictSink()
+        client = _RangerClient(sink, DETAILS, LOGGER)
+        client.update_tick(HealthcheckStatus.HEALTHY)
+
+        with mock.patch.object(sink, "deregister", side_effect=RuntimeError("boom")):
+            client.stop()
+
+        assert sink.stopped == 1
+
+    def test_provider_removes_its_znode_from_a_shared_client(self):
+        # with a caller-owned kazoo client the connection outlives the provider, so the
+        # ephemeral node would survive unless the provider deletes it explicitly
+        zk = mock.Mock()
+        zk.connected = True
+        zk.exists.return_value = False
+        sink = ZkNodeDataSink(client=zk, logger=LOGGER)
+        provider = RangerServiceProvider(ClusterDetails("unused", update_interval_in_secs=3600), DETAILS,
+                                         logger=LOGGER, node_data_sink=sink)
+
+        provider.start()
+        provider._ranger_update_tick()
+        provider.stop()
+
+        zk.create.assert_called_once()
+        zk.delete.assert_called_once_with("/ns/svc/h:8080")
+        # the shared client belongs to the caller and must stay open
+        zk.stop.assert_not_called()

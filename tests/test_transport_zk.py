@@ -16,7 +16,7 @@ import json
 from unittest import mock
 
 import pytest
-from kazoo.exceptions import NoNodeError
+from kazoo.exceptions import ConnectionLoss, NoNodeError
 
 from rangermodels.ranger_models import (HealthcheckStatus, LegacyNodeData, PortSchemes, Service, ServiceNode)
 from transport.zk import ZkNodeDataSink, ZkNodeDataSource, node_path, service_root_path
@@ -119,6 +119,16 @@ class TestZkNodeDataSource:
         nodes = ZkNodeDataSource(client=zk).nodes(SERVICE)
 
         assert [node.host for node in nodes] == ["h2"]
+
+    @pytest.mark.parametrize("error", [ConnectionLoss(), RuntimeError("boom")])
+    def test_nodes_returns_none_when_a_node_read_fails(self, error):
+        # the listing succeeded but a read failed for a transport reason: returning the
+        # remaining nodes would silently drop a live node, so the whole lookup must fail
+        zk = _zk()
+        zk.get_children.return_value = ["h1:8080", "h2:8080"]
+        zk.get.side_effect = [(_payload("h1"), None), error]
+
+        assert ZkNodeDataSource(client=zk).nodes(SERVICE) is None
 
     def test_nodes_applies_the_node_data_deserializer(self):
         zk = _zk()

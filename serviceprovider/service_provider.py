@@ -81,12 +81,36 @@ class _RangerClient(object):
         # tracks the instant the node last transitioned into a healthy state, so
         # that healthySinceTimeStamp can be published alongside every update
         self._healthy_since = UNSET_TIMESTAMP
+        # whether the sink currently holds a registration for this node. Every (re)start and
+        # every failed publish clears it, so the next tick goes through register() again
+        self._registered = False
+        # last node acknowledged by the sink, used to deregister on stop
+        self._published_node = None
 
     def start(self):
+        # a (re)connect may have lost the previous registration (eg: an expired zookeeper
+        # session drops the ephemeral node), so always register afresh after starting
+        self._registered = False
         self.sink.start()
 
     def stop(self):
+        self.deregister()
         self.sink.stop()
+
+    def deregister(self):
+        """
+        Remove the last published node from the registry, if any. Errors are logged and
+        swallowed so that shutdown always proceeds to releasing the connection.
+        """
+        node = self._published_node
+        self._published_node = None
+        self._registered = False
+        if node is None:
+            return
+        try:
+            self.sink.deregister(self.service, node)
+        except Exception:
+            self.logger.exception("Error while deregistering node from the registry")
 
     def _healthy_since_timestamp(self, status, now):
         if status != HealthcheckStatus.HEALTHY:
@@ -109,7 +133,19 @@ class _RangerClient(object):
     def update_tick(self, status=HealthcheckStatus.HEALTHY):
         service_node = self.build_node(status)
         self.logger.debug(f"Updating with: {service_node}")
-        return self.sink.update_health(self.service, service_node)
+        publish = self.sink.update_health if self._registered else self.sink.register
+        try:
+            result = publish(self.service, service_node)
+        except Exception:
+            self._registered = False
+            raise
+        if result is None:
+            # the registry did not acknowledge the write; the registration may be gone
+            self._registered = False
+            return None
+        self._registered = True
+        self._published_node = result
+        return result
 
 
 class RangerServiceProvider(object):
