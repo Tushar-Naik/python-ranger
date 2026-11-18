@@ -81,8 +81,12 @@ class SimpleServiceFinder(object):
         :param criteria: see :mod:`servicefinder.shardselector`
         :return: healthy nodes matching the criteria
         """
-        candidates = self.shard_selector.nodes(criteria, self.registry)
-        return [node for node in candidates if self._is_healthy(node)]
+        # filter for health first: shard criteria are only ever evaluated
+        # against nodes that could actually be returned, so a stale or
+        # unhealthy node (possibly with missing / unexpected node data) can
+        # neither break a predicate nor act as a bucket's representative
+        healthy_view = self.registry.filtered(self._is_healthy)
+        return list(self.shard_selector.nodes(criteria, healthy_view))
 
     def get_node(self, criteria=None):
         """

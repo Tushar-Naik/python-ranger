@@ -145,10 +145,19 @@ class LegacyNodeData(object):
             return {}
         return {"environment": self.environment, "region": self.region, "tags": self.tags}
 
+    def _tags_key(self):
+        return tuple(self.tags) if self.tags is not None else None
+
     def __eq__(self, other):
         if not isinstance(other, LegacyNodeData):
             return NotImplemented
-        return (self.environment, self.region, self.tags) == (other.environment, other.region, other.tags)
+        return (self.environment, self.region, self._tags_key()) == (other.environment, other.region,
+                                                                     other._tags_key())
+
+    def __hash__(self):
+        # defining __eq__ alone makes instances unhashable, which would break
+        # bucketing by node data in MapBasedServiceRegistry
+        return hash((self.environment, self.region, self._tags_key()))
 
     def __repr__(self):
         return f"LegacyNodeData(environment={self.environment!r}, region={self.region!r}, tags={self.tags!r})"

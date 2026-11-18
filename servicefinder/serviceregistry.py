@@ -53,9 +53,16 @@ def _freeze(value):
         hash(value)
         return value
     except TypeError:
-        # last resort for custom objects that are not hashable either; falls
-        # back to identity, which at least does not raise
-        return ('__id__', id(value))
+        pass
+    to_dict = getattr(value, 'to_dict', None)
+    if callable(to_dict):
+        # unhashable custom payloads are keyed by their serialized form, so
+        # equal instances still share a bucket (this is also exactly what
+        # goes on the wire)
+        return ('__obj__', type(value), _freeze(to_dict()))
+    # last resort for custom objects that are neither hashable nor
+    # serializable; falls back to identity, which at least does not raise
+    return ('__id__', id(value))
 
 
 class ServiceRegistry(ABC):
@@ -79,6 +86,20 @@ class ServiceRegistry(ABC):
 
         :param nodes: list of ServiceNode
         """
+
+    def filtered(self, predicate):
+        """
+        Build a detached registry of the same kind holding only the nodes that
+        pass ``predicate``. Shard selectors run against this view, so that
+        selection (including any per-bucket representative node) only ever
+        sees nodes that are eligible to be returned.
+
+        :param predicate: ``callable(ServiceNode) -> bool``
+        :return: a new registry; this one is left untouched
+        """
+        view = type(self)(self.service)
+        view.update([node for node in self.node_list() if predicate(node)])
+        return view
 
 
 class ListBasedServiceRegistry(ServiceRegistry):
@@ -118,8 +139,10 @@ class MapBasedServiceRegistry(ServiceRegistry):
         :return: mapping of node data to the list of nodes publishing it. The
         key is a hashable, frozen stand-in for the original node data (see
         :func:`_freeze`); use :meth:`nodes_for` to look up by the original value.
+        Both the mapping and the bucket lists are copies, so callers mutating
+        the result never affect the registry.
         """
-        return dict(self._buckets)
+        return {key: list(bucket) for key, bucket in self._buckets.items()}
 
     def nodes_for(self, node_data):
         """

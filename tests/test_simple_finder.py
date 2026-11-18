@@ -116,3 +116,57 @@ class TestSimpleShardedServiceFinder:
         finder.refresh()
 
         assert sorted(n.get_host() for n in finder.get_all_nodes()) == ["h1", "h2"]
+
+    def test_shard_criteria_only_sees_healthy_nodes(self):
+        source = mock.Mock()
+        source.nodes.return_value = [
+            # unhealthy / zombie nodes with metadata the predicate cannot handle
+            _node("broken-none", None, healthy=False),
+            _node("broken-type", {"shardId": "not-a-number"}, age_ms=120000),
+            _node("h1", {"shardId": 1}),
+            _node("h2", {"shardId": 2}),
+        ]
+        finder = SimpleShardedServiceFinder(SERVICE, source, zombie_check_threshold_time_in_ms=60000)
+        finder.refresh()
+
+        nodes = finder.get_all_nodes(criteria=lambda data: data["shardId"] > 1)
+
+        assert [n.get_host() for n in nodes] == ["h2"]
+
+    def test_bucket_representative_is_a_healthy_node(self):
+        source = mock.Mock()
+        # the unhealthy node comes first, so it would have been the bucket's representative
+        source.nodes.return_value = [
+            _node("stale", {"shardId": 1}, healthy=False),
+            _node("fresh", {"shardId": 1}),
+        ]
+        finder = SimpleShardedServiceFinder(SERVICE, source)
+        finder.refresh()
+        seen = []
+
+        def criteria(data):
+            seen.append(data)
+            return True
+
+        nodes = finder.get_all_nodes(criteria=criteria)
+
+        assert [n.get_host() for n in nodes] == ["fresh"]
+        assert seen == [{"shardId": 1}]
+
+    def test_unsharded_finder_filters_health_before_criteria(self):
+        source = mock.Mock()
+        source.nodes.return_value = [_node("broken", None, healthy=False), _node("h1", {"shardId": 1})]
+        finder = SimpleUnshardedServiceFinder(SERVICE, source)
+        finder.refresh()
+
+        assert [n.get_host() for n in finder.get_all_nodes(lambda data: data["shardId"] == 1)] == ["h1"]
+
+    def test_querying_does_not_modify_the_registry(self):
+        source = mock.Mock()
+        source.nodes.return_value = [_node("h1", {"shardId": 1}), _node("h2", {"shardId": 1}, healthy=False)]
+        finder = SimpleShardedServiceFinder(SERVICE, source)
+        finder.refresh()
+
+        finder.get_all_nodes(criteria=lambda data: True)
+
+        assert sorted(n.get_host() for n in finder.registry.node_list()) == ["h1", "h2"]
