@@ -83,22 +83,29 @@ def serialize_node_data(node_data):
     ``nodeData`` is deliberately untyped: the reference implementation declares
     it as a generic, and deployments routinely publish custom attributes
     (shard id, version, datacenter, capacity, feature flags ...). Anything that
-    is already a mapping is passed through, anything exposing ``to_dict()`` is
-    asked to convert itself.
+    is already a mapping or a json native value (list, string, number, boolean)
+    is passed through, anything exposing ``to_dict()`` is asked to convert
+    itself.
 
     :param node_data: payload to serialize, may be ``None``
     :return: json serializable representation, ``{}`` when there is no payload
     """
     if node_data is None:
         return {}
-    if isinstance(node_data, dict):
-        return node_data
-    to_dict = getattr(node_data, "to_dict", None)
+    return _to_json_value(node_data)
+
+
+def _to_json_value(value):
+    if value is None or isinstance(value, (dict, str, bool, int, float)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_to_json_value(item) for item in value]
+    to_dict = getattr(value, "to_dict", None)
     if callable(to_dict):
         return to_dict()
     raise TypeError(
-        f"nodeData of type {type(node_data).__name__} is not json serializable. "
-        f"Pass a dict, an object exposing to_dict(), or a custom serializer.")
+        f"nodeData of type {type(value).__name__} is not json serializable. "
+        f"Pass a json native value, an object exposing to_dict(), or a custom serializer.")
 
 
 class LegacyNodeData(object):
@@ -252,8 +259,9 @@ class ServiceNode(object):
         return cls(host=node_json['host'],
                    port=int(node_json['port']),
                    node_data=node_data,
+                   # fail closed: a node that does not advertise its health must never receive traffic
                    healthcheck_status=HealthcheckStatus.parse(safe_get(node_json, 'healthcheckStatus'),
-                                                              default=HealthcheckStatus.HEALTHY),
+                                                              default=HealthcheckStatus.UNHEALTHY),
                    last_updated_timestamp=(UNSET_TIMESTAMP if last_updated_timestamp is None
                                            else int(last_updated_timestamp)),
                    routing_weight=1.0 if routing_weight is None else float(routing_weight),

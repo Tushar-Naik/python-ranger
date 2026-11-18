@@ -16,6 +16,8 @@ import json
 import logging
 from unittest import mock
 
+import pytest
+
 from rangermodels.ranger_models import (
     UNSET_TIMESTAMP,
     ClusterDetails,
@@ -67,6 +69,16 @@ class TestPublishedNodePayload:
 
         assert _published(zk)["nodeData"] == {"shardId": 3, "version": "1.2.3"}
 
+    @pytest.mark.parametrize("node_data", [[1, 2], "shard-7", 7, 0.5, False])
+    def test_publishes_json_native_node_data(self, node_data):
+        details = ServiceDetails(host="h", port=8080, namespace="ns", service_name="svc",
+                                 node_data=node_data)
+        zk, client = _client(details)
+
+        client.update_tick(HealthcheckStatus.HEALTHY)
+
+        assert _published(zk)["nodeData"] == node_data
+
     def test_creates_ephemeral_node_when_absent(self):
         details = ServiceDetails(host="h", port=8080, namespace="ns", service_name="svc")
         zk, client = _client(details, exists=False)
@@ -99,25 +111,30 @@ class TestHealthySinceTimestamp:
         details = ServiceDetails(host="h", port=8080, namespace="ns", service_name="svc")
         zk, client = _client(details, exists=True)
 
-        client.update_tick(HealthcheckStatus.HEALTHY)
-        first = _published(zk)["healthySinceTimeStamp"]
-        client.update_tick(HealthcheckStatus.HEALTHY)
-        second = _published(zk)["healthySinceTimeStamp"]
+        with mock.patch("serviceprovider.service_provider.current_milli_time", side_effect=[1000, 2000]):
+            client.update_tick(HealthcheckStatus.HEALTHY)
+            first = _published(zk)
+            client.update_tick(HealthcheckStatus.HEALTHY)
+            second = _published(zk)
 
-        assert first != UNSET_TIMESTAMP
-        assert first == second
+        assert first["healthySinceTimeStamp"] == 1000
+        assert second["lastUpdatedTimeStamp"] == 2000
         # it marks the start of the healthy streak, not the latest update
-        assert second <= _published(zk)["lastUpdatedTimeStamp"]
+        assert second["healthySinceTimeStamp"] == 1000
 
     def test_reset_after_an_unhealthy_tick(self):
         details = ServiceDetails(host="h", port=8080, namespace="ns", service_name="svc")
         zk, client = _client(details, exists=True)
 
-        client.update_tick(HealthcheckStatus.HEALTHY)
-        first = _published(zk)["healthySinceTimeStamp"]
-        client.update_tick(HealthcheckStatus.UNHEALTHY)
-        client.update_tick(HealthcheckStatus.HEALTHY)
-        third = _published(zk)["healthySinceTimeStamp"]
+        with mock.patch("serviceprovider.service_provider.current_milli_time", side_effect=[1000, 2000, 3000]):
+            client.update_tick(HealthcheckStatus.HEALTHY)
+            first = _published(zk)["healthySinceTimeStamp"]
+            client.update_tick(HealthcheckStatus.UNHEALTHY)
+            after_unhealthy = _published(zk)["healthySinceTimeStamp"]
+            client.update_tick(HealthcheckStatus.HEALTHY)
+            third = _published(zk)["healthySinceTimeStamp"]
 
-        assert third != UNSET_TIMESTAMP
-        assert third >= first
+        assert first == 1000
+        assert after_unhealthy == UNSET_TIMESTAMP
+        # the new streak starts at the third tick, not the first one
+        assert third == 3000

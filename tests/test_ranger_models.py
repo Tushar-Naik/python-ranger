@@ -87,6 +87,25 @@ class TestServiceNodeDeserialization:
 
         assert node.healthcheck_status == HealthcheckStatus.UNHEALTHY
 
+    @pytest.mark.parametrize("wire_fields", [
+        {},
+        {"healthcheckStatus": None},
+    ], ids=["missing", "null"])
+    def test_missing_or_null_status_fails_closed(self, wire_fields):
+        """
+        A node that does not advertise its health must not be treated as
+        healthy, even when its timestamp is fresh.
+        """
+        payload = json.dumps(dict({
+            "host": "host-1",
+            "port": 8080,
+            "lastUpdatedTimeStamp": 1700000000000,
+        }, **wire_fields))
+
+        node = ServiceNode.create(payload.encode("utf-8"))
+
+        assert node.healthcheck_status == HealthcheckStatus.UNHEALTHY
+
     def test_accessors(self):
         payload = json.dumps({
             "host": "host-1",
@@ -114,8 +133,15 @@ class TestGenericNodeData:
         {"shardId": 7, "version": "1.4.2"},
         {"nested": {"a": [1, 2, 3]}},
         {},
+        [1, 2],
+        ["a", {"b": None}],
+        "shard-7",
+        7,
+        1.5,
+        True,
+        False,
     ])
-    def test_arbitrary_mapping_round_trips(self, payload):
+    def test_arbitrary_payload_round_trips(self, payload):
         wire = json.dumps({
             "host": "host-1",
             "port": 8080,
@@ -147,9 +173,26 @@ class TestGenericNodeData:
 
         assert node.to_dict()["nodeData"] == {"environment": "stage", "region": "r1", "tags": ["a"]}
 
+    @pytest.mark.parametrize("payload, expected", [
+        ([1, 2], [1, 2]),
+        ((1, 2), [1, 2]),
+        ("shard-7", "shard-7"),
+        (0, 0),
+        (2.5, 2.5),
+        (False, False),
+        ([LegacyNodeData("stage")], [{"environment": "stage", "region": None, "tags": None}]),
+    ])
+    def test_json_native_payloads_are_serialized(self, payload, expected):
+        wire = ServiceNode(host="h", port=1, node_data=payload).to_dict()
+
+        assert wire["nodeData"] == expected
+        assert json.loads(json.dumps(wire))["nodeData"] == expected
+
     def test_unserializable_node_data_is_rejected(self):
         with pytest.raises(TypeError):
             serialize_node_data(object())
+        with pytest.raises(TypeError):
+            serialize_node_data([object()])
 
     def test_legacy_alias_is_preserved(self):
         assert NodeData is LegacyNodeData
