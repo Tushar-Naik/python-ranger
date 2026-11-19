@@ -13,9 +13,13 @@
 # limitations under the License.
 
 from transport.base import NodeDataSink, NodeDataSource, NodeDataStoreConnector
+from transport.http import HttpClientConfig, HttpNodeDataSink, HttpNodeDataSource
 from transport.zk import ZkNodeDataSink, ZkNodeDataSource, node_path, service_root_path
 
 __all__ = [
+    'HttpClientConfig',
+    'HttpNodeDataSink',
+    'HttpNodeDataSource',
     'NodeDataSink',
     'NodeDataSource',
     'NodeDataStoreConnector',
